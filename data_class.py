@@ -120,10 +120,13 @@ class DataTable:
         self.value = data['value']
         self.sigma = data['sigma']
         self.bias = data['bias']
+        toto = np.ones_like(data['lon'], dtype=int)
+        toto[:] = 2
+        self.origin = toto
 
     def __add__(self, new):
         out = copy.deepcopy(new)
-        #out.origin = np.hstack( ( self.origin, new.origin ) )
+        out.origin = np.hstack( ( self.origin, new.origin ) )
         out.year = np.hstack( ( self.year, new.year ) )
         #out.posdyear = np.hstack( ( self.posdyear, new.posdyear ) )
         #out.negdyear = np.hstack( ( self.negdyear, new.negdyear ) )
