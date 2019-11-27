@@ -47,16 +47,10 @@ class DataTable:
         self.dinten = data['dinten']
         self.inten_code = np.char.decode(data['inten_code'])
         self.source = np.char.decode(data['source'])
-        mask_inten = ( self.inten > 0. )
-        mask_decl = ( np.abs(self.decl) >= 0. )
-        mask_inc = ( np.abs(self.inc) >= 0. )
-        print(mask_inten)
-        print(self.inten[~(mask_inten)])
-        print(mask_decl)
-        print(self.decl[~(mask_decl)])
-        print(mask_inc)
-        print(self.inc[~(mask_inc)])
-
+        mask_inten = ~np.isnan((self.inten))
+        mask_decl = ~np.isnan((self.decl))
+        mask_inc = ~np.isnan((self.inc))
+        # unfold arrays to make them gufm1-like
         titi = np.array(data['origin'][mask_inten])
         toto = np.array(data['origin'][mask_decl])
         tutu = np.array(data['origin'][mask_inc])
@@ -96,9 +90,11 @@ class DataTable:
         toto = np.array(data['ddecl'][mask_decl])
         tutu = np.array(data['dinc'][mask_inc])
         self.sigma = np.hstack( ( titi, toto, tutu) ) 
+        """
         print(np.shape((self.element)))
         print(self.element)
-        #sys.exit()
+        sys.exit()
+        """
 
     def read_obsdata_gufm1(self,fileName):
         datatype = ([
