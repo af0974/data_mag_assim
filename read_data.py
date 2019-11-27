@@ -19,12 +19,22 @@ print(len(datTot.year))
 
 fig = plt.figure(figsize=(5,5))
 ax1 = fig.add_subplot(111)
-sns.distplot(datTot.year, hist = True, kde = False,
+#sns.distplot(datTot.year, hist = True, kde = False,
+#                     kde_kws = {'shade': True, 'linewidth': 2},
+#                     label = 'all_data', color='blue')
+sns.distplot(datTot.year[datTot.origin==1], hist = True, kde = False,
                      kde_kws = {'shade': True, 'linewidth': 2},
-                     label = 'all_data', color='blue')
+                     label = 'archeo/volcanic', color='red')
+sns.distplot(datTot.year[datTot.origin==0], hist = True, kde = False,
+                     kde_kws = {'shade': True, 'linewidth': 2},
+                     label = 'historic', color='blue')
+sns.distplot(datTot.year[datTot.origin==2], hist = True, kde = False,
+                     kde_kws = {'shade': True, 'linewidth': 2},
+                     label = 'observatory', color='green')
 ax1.legend(loc="best")
 ax1.set_xlabel('year AD')
 plt.tight_layout()
+plt.yscale('log')
 plt.show()
 
 
