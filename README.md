@@ -10,7 +10,7 @@ python read_database_orig.py
 ```
 
 The preparation of parody_pdaf input files from the binary database is done with
-````bash
+```bash
 `python make_parody_pdaf_input.py
 ```
 
