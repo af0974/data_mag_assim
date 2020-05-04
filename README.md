@@ -14,3 +14,5 @@ The preparation of parody_pdaf input files from the binary database is done with
 python make_parody_pdaf_input.py
 ```
 
+## Additional features 
+The quality of paleomagnetic modelling can be assessed according to the methodology introduced by Sprain et al. (EPSL, 2019). 
