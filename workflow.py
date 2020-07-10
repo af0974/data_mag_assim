@@ -415,6 +415,318 @@ def get_rms_intensity( comm, size, rank, config_file):
 #
     return time, F_rms, gauss_unit, time_unit    
 
+def quadratic_disp(lat, alpha, beta):
+    return alpha**2 + (beta*lat)**2
+
+def angular_distance_2sphere( lat1, lon1, lat2, lon2, Verbose=False):
+
+    lam1       = np.deg2rad(lat1)
+    lam2       = np.deg2rad(lat2)
+    dphi       = np.deg2rad(lon2 - lon1)
+
+    if Verbose is True:
+        print('delta calculation')
+        print(dphi)
+        print(lam1)
+        print(lam2)
+    
+    delta = np.rad2deg( np.arccos( np.sin(lam1)*np.sin(lam2) + np.cos(lam1)*np.cos(lam2)*np.cos(dphi) )  )
+    return delta
+
+def compute_Delta_QPM(QPMsimu, QPMearth, Verbose=False):
+    if ( np.abs(QPMsimu.a_med) > QPMearth.a_med):
+        denom = (QPMearth.a_high - QPMearth.a_med) + (np.abs(QPMsimu.a_med) - np.abs(QPMsimu.a_low))
+        deltaQPM_a = ( np.abs( QPMsimu.a_med) - QPMearth.a_med ) / denom
+    else:
+        denom = (QPMearh.a_med - QPMearth.a_low) + (np.abs(QPMsimu.a_high) - np.abs(QPMsimu.a_med))
+        deltaQPM_a = ( QPMearth.a_med - np.abs(QPMsimu.a_med) ) / denom
+#
+    if ( np.abs(QPMsimu.b_med) > QPMearth.b_med):
+        denom = (QPMearth.b_high - QPMearth.b_med) + (np.abs(QPMsimu.b_med) - np.abs(QPMsimu.b_low))
+        deltaQPM_b = ( np.abs( QPMsimu.b_med) - QPMearth.b_med ) / denom
+    else:
+        denom = (QPMearth.b_med - QPMearth.b_low) + (np.abs(QPMsimu.b_high) - np.abs(QPMsimu.b_med))
+        deltaQPM_b = ( QPMearth.b_med - np.abs(QPMsimu.b_med) ) / denom
+#
+    if ( np.abs(QPMsimu.delta_Inc_med) > QPMearth.delta_Inc_med):
+        diff = np.abs( QPMsimu.delta_Inc_med) - QPMearth.delta_Inc_med
+        denom = (QPMearth.delta_Inc_high - QPMearth.delta_Inc_med) + (np.abs(QPMsimu.delta_Inc_med) - np.abs(QPMsimu.delta_Inc_low))
+        deltaQPM_delta_Inc = diff / denom
+    else:
+        diff = QPMearth.delta_Inc_med - np.abs( QPMsimu.delta_Inc_med)        
+        denom = (QPMearth.delta_Inc_med - QPMearth.delta_Inc_low) + (np.abs(QPMsimu.delta_Inc_high) - np.abs(QPMsimu.delta_Inc_med))
+        deltaQPM_delta_Inc = diff / denom
+#   Vpercent
+    if ( QPMsimu.Vpercent_med > QPMearth.Vpercent_med):
+        denom = (QPMearth.Vpercent_high - QPMearth.Vpercent_med) + (QPMsimu.Vpercent_med - QPMsimu.Vpercent_low)
+    else:
+        denom = (QPMearth.Vpercent_med - QPMearth.Vpercent_low) + (QPMsimu.Vpercent_high - QPMsimu.Vpercent_med)
+    deltaQPM_Vpercent = np.abs( QPMsimu.Vpercent_med - QPMearth.Vpercent_med ) / denom
+#   Rev
+    denom = QPMearth.taut_high - QPMearth.taut_med
+    deltaQPM_rev = np.abs( QPMsimu.taut - QPMearth.taut_med ) / denom 
+    
+    if Verbose is True: 
+        print('deltaQPM_a         = %10.2f' % (deltaQPM_a) )
+        print('deltaQPM_b         = %10.2f' % (deltaQPM_b) )
+        print('deltaQPM_delta_Inc = %10.2f' % (deltaQPM_delta_Inc) )	   
+        print('deltaQPM_rev       = %10.2f ' % (deltaQPM_rev) )
+        print('deltaQPM_Vpercent  = %10.2f ' % (deltaQPM_Vpercent) )	   
+
+    DeltaQPM = np.array([ deltaQPM_a, deltaQPM_b, deltaQPM_delta_Inc,  deltaQPM_rev,  deltaQPM_Vpercent])
+    mask = ( DeltaQPM < 1. )
+    if Verbose is True:
+        print()
+        print( ' DeltaQPM is %10.2f ' %(np.sum(DeltaQPM) ) )
+        print( ' QPM is %i ' % (np.sum(mask) ) )
+
+
+def compute_QPM(comm, size, rank, config_file):
+    import psv10_class 
+    import random
+    from scipy.optimize import curve_fit
+    if rank == 0:
+        print()
+        print('  Calculation of QPM (Sprain et al. EPSL 2019) ')
+        print()
+
+	# paleomag reference  
+    QPMearth = psv10_class.QPM(type='QPM_std', acro='earth')
+    Filename='Sprain_etal_EPSL_2019_1-s2.0-S0012821X19304509-mmc7.txt'
+    datPSV10 = psv10_class.DataTable(Filename, type='PSV10')
+    lmax = datPSV10.l_trunc
+    nloc = len(datPSV10.location)
+
+    # this dynamo simulation
+    config_file = config_file
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    tag = config['Common']['tag']
+    Verbose = config['Common'].getboolean('Verbose')
+    fname_gauss = config['Gauss coefficients']['filename']
+    gauss_unit = config['Gauss coefficients']['unit']
+    time_unit = config['Rescaling factors and units']['time unit']
+    ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
+
+    QPMsimu = psv10_class.QPM(type='QPM_std', acro=tag)
+    npzfile = np.load(fname_gauss)
+    t = npzfile['time']
+    ghlm_arr = npzfile['ghlm'][:,0:lmax*(lmax+2)]
+    nsamp = len(t)
+    simulation_time = t[-1] - t[0]
+    time_intervals = np.ediff1d(t, to_end=[0.])
+    if rank == 0:
+        print('    total number of samples = ', nsamp)
+        print('    total simulation time =', simulation_time ,' ', time_unit)
+
+    dipole_latitude = np.zeros(nsamp, dtype=float)
+    for i in range(nsamp):
+        g10 = ghlm_arr[ i, 0]
+        g11 = ghlm_arr[ i, 1]
+        h11 = ghlm_arr[ i, 2]
+        dipole_latitude[i] = np.rad2deg(np.arctan( g10 / np.sqrt(g11**2+h11**2) ))
+    #
+    #Rev criterion
+    #
+    #"normal" polarity 
+    mask_n = dipole_latitude > 45.
+    tau_n = np.sum(time_intervals[mask_n]) / simulation_time
+    #"reverse" polarity
+    mask_r = dipole_latitude < -45.
+    tau_r = np.sum(time_intervals[mask_r]) / simulation_time
+    #excursion time
+    mask_t = np.abs(dipole_latitude) < 45.
+    tau_t = np.sum(time_intervals[mask_t]) / simulation_time
+
+    QPMsimu.taut = tau_t
+    QPMsimu.taur = tau_r
+    QPMsimu.taun = tau_n
+	
+    nbins = 19
+    bins = np.linspace( -90, 90, nbins)
+#   number of localities
+    nloc_tot = len(datPSV10.location)
+    if rank == 0 and Verbose is True:
+        print('    total number of localities = ', nloc_tot)
+    ndraw = 1600
+    inc_anom = np.zeros( (ndraw, nbins), dtype=float)
+    scatter_squared = np.zeros( (ndraw, nloc_tot), dtype=float)
+    Vpercent = np.zeros( (ndraw), dtype=float )
+    bin_lat = np.zeros( nbins, dtype=float)
+    empty_bin = np.zeros( nbins, dtype=bool)
+    empty_bin[:] = True
+    r_earth = 6371.2e3
+    vdm_fact = 1.e7 * r_earth**3
+   #mpi 1D domain decomposition
+    ndraw_per_process = int(ndraw / size)
+    mydraw_beg = rank * ndraw_per_process
+    mydraw_end = mydraw_beg + ndraw_per_process
+
+    for idraw in range(mydraw_beg, mydraw_end):
+        if np.mod(idraw+1-mydraw_beg,ndraw_per_process/10) == 0 and Verbose is True:
+            if rank == 0:
+                print('        rank ', rank, ' performed ', idraw+1-mydraw_beg, 'draws', flush=True)
+        VDM = None
+        iloc_glob = -1
+        for ibin in range(len(bins)-1):
+            lambda_min = bins[ibin]
+            lambda_max = bins[ibin+1]
+            mask =  ( datPSV10.latitude_in_deg > lambda_min ) *  ( datPSV10.latitude_in_deg < lambda_max)
+            my_location = datPSV10.location[mask]
+            my_nloc = len(my_location)
+            if my_nloc > 0:
+                empty_bin[ ibin ] = False
+                my_number_of_sites =  datPSV10.number_of_sites[mask]
+                my_latitude_in_deg = datPSV10.latitude_in_deg[mask]
+                my_longitude_in_deg = datPSV10.longitude_in_deg[mask]
+                my_SHB_X = datPSV10.SHB_X[mask,:]
+                my_SHB_Y = datPSV10.SHB_Y[mask,:]
+                my_SHB_Z = datPSV10.SHB_Z[mask,:]
+                n_north = None
+                n_east = None
+                n_down = None
+                bin_lat[ibin] = np.mean(my_latitude_in_deg)
+                Inc_GAD = np.arctan( 2. * np.tan(np.deg2rad(np.mean(my_latitude_in_deg))))
+                for iloc in range(my_nloc):
+                    iloc_glob = iloc_glob + 1
+                    nsite = my_number_of_sites[iloc]
+                    #take nsite random samples
+                    timesteps = random.sample(range(nsamp), nsite)
+                    VGP_lat = []
+                    VGP_lon = []
+                    gh = np.transpose( np.reshape( np.repeat( -1. * np.sign( ghlm_arr[ timesteps,0]), 120, axis=0 ), (nsite,120) ) * ghlm_arr[ timesteps, :] )
+                    X = np.dot(my_SHB_X[iloc,:], gh)
+                    Y = np.dot(my_SHB_Y[iloc,:], gh)
+                    Z = np.dot(my_SHB_Z[iloc,:], gh)
+                    F = np.sqrt( X**2 + Y**2 + Z**2 )
+                    H = np.sqrt( X**2 + Y**2 )
+                    Inc = np.arctan2( Z , H)
+                    Dec = np.arctan2( Y , X)
+                    g10 = gh[0]
+                    g11 = gh[1]
+                    h11 = gh[2]
+                    theta_mag = np.arctan2( np.sqrt(g11**2+h11**2) , g10 )
+                    if VDM is None:
+                        VDM = vdm_fact * F / np.sqrt( 1. + 3.*(np.cos(theta_mag))**2 )
+                    else:
+                        VDM = np.concatenate( ( VDM,  vdm_fact * F / np.sqrt( 1. + 3.*(np.cos(theta_mag))**2  ) ), axis=None)
+                    p = np.arctan2(2.* H, Z )
+                    VGP_lam = np.arcsin( np.sin(np.deg2rad(my_latitude_in_deg[iloc])) * np.cos(p)\
+					                    + np.cos(np.deg2rad(my_latitude_in_deg[iloc]))*np.sin(p)*np.cos(Dec) )
+                    beta = np.rad2deg( np.arcsin( np.sin(p) * np.sin(Dec) / np.cos(VGP_lam) ) )
+                    VGP_phi = np.zeros(nsite, dtype=float)
+                    for istep in range(nsite):
+                        if ( np.cos(p[istep]) > ( np.sin(np.deg2rad(my_latitude_in_deg[iloc])) * np.sin(VGP_lam[istep]) ) ):
+                            VGP_phi[istep] = my_longitude_in_deg[iloc] + beta[istep]
+                        else:
+                            VGP_phi[istep] = my_longitude_in_deg[iloc] + 180. - beta[istep]
+                    VGP_lat = np.rad2deg(VGP_lam)
+                    VGP_lon = np.mod(VGP_phi, 360.)
+                    if n_north is None:
+                        n_north =  X/F
+                        n_east =  Y/F
+                        n_down =  Z/F
+                    else:
+                        n_north = np.concatenate( (n_north, X/F), axis=None)
+                        n_east = np.concatenate( (n_east, Y/F), axis=None)
+                        n_down = np.concatenate( (n_down, Z/F), axis=None)
+                    delta = 90. - VGP_lat
+                    ASD = np.sqrt(np.sum(delta**2)/(np.shape(delta)[0]-1))
+                    A = 1.8 * ASD + 5.
+                    delta_max = np.max(delta)
+                    while delta_max > A:
+                        mask_delta = delta < delta_max * np.ones_like(delta)
+                        delta = delta[ mask_delta ]
+                        ASD = np.sqrt(np.sum(delta**2)/(np.shape(delta)[0]-1))
+                        A = 1.8 * ASD + 5.
+                        delta_max = np.max(delta)
+                    scatter_squared[idraw, iloc_glob] = np.sum(delta**2)/(np.shape(delta)[0]-1)
+				# Nuts and bolts of paleomagnetism, Cox & Hart, page 310
+                r_north = np.sum(n_north)
+                r_east = np.sum(n_east)
+                r_down = np.sum(n_down)
+                inc_avg = np.arctan( r_down / np.sqrt( r_north**2 + r_east**2 ) )
+                inc_anom[idraw, ibin] = np.rad2deg(inc_avg - Inc_GAD)				
+        Vmed = np.median(VDM, axis=None)
+        VDM75, VDM25 = np.percentile(VDM, [75 ,25])
+        Viqr = VDM75 - VDM25
+        Vpercent[idraw] = Viqr / Vmed
+
+    a = np.zeros( ndraw, dtype=float)
+    b = np.zeros( ndraw, dtype=float)
+    for idraw in range(mydraw_beg, mydraw_end):
+        my_scatter_squared = scatter_squared[idraw,:]
+        mask_test = np.isfinite(my_scatter_squared)
+        my_scatter_squared = my_scatter_squared[mask_test]
+        my_latitude_in_deg = datPSV10.latitude_in_deg[mask_test]
+        popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared)
+        a[idraw] = np.abs(popt[0])
+        b[idraw] = np.abs(popt[1])
+	#
+	#Global gather if draw done in parallel
+    #Vpercent
+    if size>1:
+        Vpercent = comm.allreduce(Vpercent, op=MPI.SUM)
+        a = comm.allreduce(a, op=MPI.SUM)
+        b = comm.allreduce(b, op=MPI.SUM)
+        for ibin in range(len(bins)-1):
+            inc_anom[:,ibin] = comm.allreduce(inc_anom[:,ibin], op=MPI.SUM)
+	#inspection of arrays
+    Vpercent = Vpercent[np.isfinite(Vpercent)]	
+    a = a[np.isfinite(a)]
+    b = b[np.isfinite(b)]
+    
+    QPMsimu.Vpercent_med = np.median( Vpercent)
+    QPMsimu.Vpercent_low = np.percentile( Vpercent, 2.5)
+    QPMsimu.Vpercent_high = np.percentile( Vpercent, 97.5)
+    if rank ==0 and Verbose is True:
+        print()
+        print('        Vpercent med low high  = ', QPMsimu.Vpercent_med, QPMsimu.Vpercent_low, QPMsimu.Vpercent_high)
+        print()
+    QPMsimu.a_med = np.median(a)
+    QPMsimu.a_low = np.percentile(a, 2.5)
+    QPMsimu.a_high = np.percentile(a, 97.5)
+    QPMsimu.b_med = np.median(b)
+    QPMsimu.b_low = np.percentile(b, 2.5)
+    QPMsimu.b_high = np.percentile(b, 97.5)
+    if rank ==0 and Verbose is True: 
+        print()
+        print('        a med low high  = ', QPMsimu.a_med, QPMsimu.a_low, QPMsimu.a_high)
+        print('        b med low high  = ', QPMsimu.b_med, QPMsimu.b_low, QPMsimu.b_high)
+        print()
+
+    inc_anom_median = np.zeros(nbins, dtype=float)
+    inc_anom_low = np.zeros(nbins, dtype=float)
+    inc_anom_high = np.zeros(nbins, dtype=float)
+    for ibin in range(len(bins)-1):
+        if not empty_bin[ibin]:
+            inc_anom_median[ibin] = np.median(     inc_anom[:,ibin])
+            if inc_anom_median[ibin] > 0:
+                inc_anom_low[ibin]    = np.percentile( inc_anom[:,ibin], 2.5)
+                inc_anom_high[ibin]   = np.percentile( inc_anom[:, ibin], 97.5)
+            else:
+                inc_anom_low[ibin]    = np.percentile( inc_anom[:,ibin], 97.5)
+                inc_anom_high[ibin]   = np.percentile( inc_anom[:, ibin], 2.5)
+            if rank ==0 and Verbose is True:
+                print( "        %12.3f %12.3f %12.3f %12.3f " % (bin_lat[ibin], inc_anom_median[ibin], inc_anom_low[ibin], inc_anom_high[ibin]) )
+    inc_ind_max = np.argmax(np.abs(inc_anom_median))
+    QPMsimu.delta_Inc_med = inc_anom_median[inc_ind_max]
+    QPMsimu.delta_Inc_low = inc_anom_low[inc_ind_max]
+    QPMsimu.delta_Inc_high = inc_anom_high[inc_ind_max]
+    if rank == 0 and Verbose is True:
+        print()
+        print('QPMsimu.delta_Inc_med = %10.2f QPMsimu.delta_Inc_low = %10.2f  QPMsimu.delta_Inc_high = %10.2f '\
+        % (QPMsimu.delta_Inc_med, QPMsimu.delta_Inc_low, QPMsimu.delta_Inc_high))
+	#to complete
+
+    Verbose = False
+    if rank == 0:
+       Verbose = True
+       compute_Delta_QPM(QPMsimu, QPMearth, Verbose=Verbose)
+
+    QPM_results = [] 
+    return QPM_results
+
 #
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
@@ -439,3 +751,5 @@ if config['Diags'].getboolean('rms_intensity') is True:
     time, F_rms, gauss_unit, time_unit = get_rms_intensity( comm, size, rank, config_file)
     if rank==0:
         np.savez('F_rms', time=time, F_rms=F_rms, gauss_unit = gauss_unit, time_unit = time_unit)
+if config['Diags'].getboolean('QPM') is True:
+	QPM_results = compute_QPM(comm, size, rank, config_file)
