@@ -20,6 +20,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
     fname = config['Common']['filename']
+    outdir = config['Common']['output_directory']
     tag = config['Common']['tag']
     Verbose = config['Common'].getboolean('Verbose')
     dump_spectra = config['Rescaling'].getboolean('dump_spectra')
@@ -118,7 +119,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
         my_sp_b = sp_b[:,mask]
         my_sp_bdot = sp_bdot[:,mask]
         if dump_spectra is True: 
-           np.savez_compressed('extended_spectra_unprocessed_'+tag,  sp_b = my_sp_b, sp_bdot = my_sp_bdot, tau_l = my_tau_l)
+           np.savez_compressed(outdir+'/'+'extended_spectra_unprocessed_'+tag,  sp_b = my_sp_b, sp_bdot = my_sp_bdot, tau_l = my_tau_l)
         for il in range(1,ltrunc+1):
             tau_sv_avg[ il] = np.sqrt( np.average(my_sp_b[:,:], axis =1)[il] / np.average(my_sp_bdot[:,:], axis =1)[il] )
 
@@ -146,7 +147,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
             plt.xlabel('spherical harmonic degree $\ell$')
             plt.legend(loc='best')
             plt.tight_layout()
-            plt.savefig('sv_timescale'+tag+'.pdf')
+            plt.savefig(outdir+'/'+'sv_timescale'+tag+'.pdf')
 
         g10_mean = np.mean(abs(g10))
         vadm_earth = 7.46*1.e22
@@ -158,7 +159,8 @@ def get_rescaling_factors(comm, size, rank, config_file):
             print( '        magnetic field conversion factor (to obtain mT) = ', scaling_factor_mag)
             print( '        time average abs(g10) = {:>3f} nT'.format( scaling_factor_mag * 1e6 * g10_mean) )
         np.savez('conversion_factors_'+tag, scaling_factor_time = scaling_factor_time, scaling_factor_mag = scaling_factor_mag) 
-        config.add_section('Rescaling factors and units')
+        if config.has_section('Rescaling factors and units') is False: 
+	        config.add_section('Rescaling factors and units')
         config.set('Rescaling factors and units', 'scaling_factor_mag', str(scaling_factor_mag))
         config.set('Rescaling factors and units', 'mag unit', 'mT')
         config.set('Rescaling factors and units', 'scaling_factor_time', str(scaling_factor_time))
@@ -180,6 +182,7 @@ def make_gauss_history(comm, size, rank, config_file):
     config.read(config_file)
     fname = config['Common']['filename']
     tag = config['Common']['tag']
+    outdir = config['Common']['output_directory']
     Verbose = config['Common'].getboolean('Verbose')
     nskip_analysis = int(config['Common']['nskip_analysis'])
     scaling_factor_time = float(config['Rescaling factors and units']['scaling_factor_time'])
@@ -268,9 +271,10 @@ def make_gauss_history(comm, size, rank, config_file):
         my_hlm = hlm[mask, :, :]
         my_ghlm = ghlm[mask, :]
         my_time = time[mask]-time[0] # start at t=0.
-        gauss_fname = 't_gauss_nskip%i_'%nskip+tag
+        gauss_fname = outdir+'/'+'t_gauss_nskip%i_'%nskip+tag
         np.savez(gauss_fname, time = my_time, glm = my_glm, hlm = my_hlm, ghlm = my_ghlm)
-        config.add_section('Gauss coefficients')
+        if config.has_section('Gauss coefficients') is False:
+            config.add_section('Gauss coefficients')
         config.set('Gauss coefficients', 'ltrunc', str(ltrunc) )
         config.set('Gauss coefficients', 'unit', gauss_unit)
         config.set('Gauss coefficients', 'filename', gauss_fname+'.npz')
@@ -289,6 +293,7 @@ def prepare_SHB_plot( comm, size, rank, config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
     Verbose = config['Common'].getboolean('Verbose')
+    outdir = config['Common']['output_directory']
 
     l_trunc = 10
     sh = shtns.sht(l_trunc)
@@ -341,8 +346,9 @@ def prepare_SHB_plot( comm, size, rank, config_file):
 
     if rank == 0: 
         filename = 'SHB_nlat%i_nlon%i'%(ntheta,nphi)
-        np.savez(filename, SHBX = SHBX, SHBY = SHBY, SHBZ = SHBZ, l_trunc=l_trunc, npt=npt, theta=theta,phi=phi)
-        config.add_section('Design matrices on regular grid')
+        np.savez(outdir+'/'+filename, SHBX = SHBX, SHBY = SHBY, SHBZ = SHBZ, l_trunc=l_trunc, npt=npt, theta=theta,phi=phi)
+        if config.has_section('Design matrices on regular grid') is False:
+            config.add_section('Design matrices on regular grid')
         config.set('Design matrices on regular grid', 'l_trunc', str(l_trunc) )
         config.set('Design matrices on regular grid', 'nlat', str(ntheta) )
         config.set('Design matrices on regular grid', 'nlon', str(nphi) )
@@ -365,6 +371,7 @@ def get_rms_intensity( comm, size, rank, config_file):
     Verbose = config['Common'].getboolean('Verbose')
     fname_gauss = config['Gauss coefficients']['filename']
     gauss_unit = config['Gauss coefficients']['unit']
+    outdir = config['Common']['output_directory']
     ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
     tag = config['Common']['tag']
     time_unit = config['Rescaling factors and units']['time unit']
@@ -373,11 +380,11 @@ def get_rms_intensity( comm, size, rank, config_file):
     nlon = int(config['Design matrices on regular grid']['nlon'])
     fname_SHB = config['Design matrices on regular grid']['filename']
 
-    npzfile =  np.load(fname_gauss)
+    npzfile =  np.load(outdir+'/'+fname_gauss)
     time = npzfile['time']
     ghlm = npzfile['ghlm']
 
-    npzfile_SHB = np.load(fname_SHB)
+    npzfile_SHB = np.load(outdir+'/'+fname_SHB)
     SHBX = npzfile_SHB['SHBX']
     SHBY = npzfile_SHB['SHBY']
     SHBZ = npzfile_SHB['SHBZ']
@@ -504,12 +511,13 @@ def compute_QPM(comm, size, rank, config_file):
     tag = config['Common']['tag']
     Verbose = config['Common'].getboolean('Verbose')
     fname_gauss = config['Gauss coefficients']['filename']
+    outdir = config['Common']['output_directory']
     gauss_unit = config['Gauss coefficients']['unit']
     time_unit = config['Rescaling factors and units']['time unit']
     ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
 
     QPMsimu = psv10_class.QPM(type='QPM_std', acro=tag)
-    npzfile = np.load(fname_gauss)
+    npzfile = np.load(outdir+fname_gauss)
     t = npzfile['time']
     ghlm_arr = npzfile['ghlm'][:,0:lmax*(lmax+2)]
     nsamp = len(t)
