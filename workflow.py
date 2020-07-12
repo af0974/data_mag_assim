@@ -607,7 +607,7 @@ def compute_QPM(comm, size, rank, config_file):
     nloc_tot = len(datPSV10.location)
     if rank == 0 and Verbose is True:
         print('    total number of localities = ', nloc_tot)
-    ndraw = size*1000
+    ndraw = 10000
     inc_anom = np.zeros( (ndraw, nbins), dtype=float)
     scatter_squared = np.zeros( (ndraw, nloc_tot), dtype=float)
     Vpercent = np.zeros( (ndraw), dtype=float )
@@ -620,6 +620,8 @@ def compute_QPM(comm, size, rank, config_file):
     ndraw_per_process = int(ndraw / size)
     mydraw_beg = rank * ndraw_per_process
     mydraw_end = mydraw_beg + ndraw_per_process
+    if rank==size-1:
+        mydraw_end = ndraw
 
     for idraw in range(mydraw_beg, mydraw_end):
         if np.mod(idraw+1-mydraw_beg,ndraw_per_process/10) == 0 and Verbose is True:
@@ -718,7 +720,8 @@ def compute_QPM(comm, size, rank, config_file):
         mask_test = np.isfinite(my_scatter_squared)
         my_scatter_squared = my_scatter_squared[mask_test]
         my_latitude_in_deg = datPSV10.latitude_in_deg[mask_test]
-        popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared)
+        #popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared, check_finite=True, p0=[25.,0.5], method='dogbox', bounds=([0.,0.],[100.,1.]))
+        popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared, check_finite=True, p0=[25.,0.5], bounds=([0.,0.],[100.,2.]))
         a[idraw] = np.abs(popt[0])
         b[idraw] = np.abs(popt[1])
 	#
