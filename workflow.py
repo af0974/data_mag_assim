@@ -42,7 +42,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
     raw.shape
 #
     if Verbose is True and rank==0:
-        print('    considering the first ', percent,' percent of data to establish rescaling factors')
+        print('    considering the first ', percent,' percent of data to establish rescaling factors', flush=True)
     tag = tag+'_'+str(percent)+'%'
 #
     twork = raw[:,0]
@@ -81,7 +81,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
         if rank == 0: 
             print('    1D domain decomposition for processing:', flush=True)
     if Verbose is True:
-       print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank)
+       print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
 ###
 #
     for i in range(mysamp_beg,mysamp_end):
@@ -158,7 +158,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
         if Verbose is True: 
             print( '        magnetic field conversion factor (to obtain mT) = ', scaling_factor_mag)
             print( '        time average abs(g10) = {:>3f} nT'.format( scaling_factor_mag * 1e6 * g10_mean) )
-        np.savez('conversion_factors_'+tag, scaling_factor_time = scaling_factor_time, scaling_factor_mag = scaling_factor_mag) 
+        np.savez(outdir+'/'+'conversion_factors_'+tag, scaling_factor_time = scaling_factor_time, scaling_factor_mag = scaling_factor_mag) 
         if config.has_section('Rescaling factors and units') is False: 
 	        config.add_section('Rescaling factors and units')
         config.set('Rescaling factors and units', 'scaling_factor_mag', str(scaling_factor_mag))
@@ -168,27 +168,27 @@ def get_rescaling_factors(comm, size, rank, config_file):
         config.set('Common', 'rescaling_done', 'True')
         config_file = open(config_file, 'w')
         config.write(config_file)
+        config_file.close()
 
 def make_gauss_history(comm, size, rank, config_file):
 
     if rank == 0:
         print()
         print('  Constructing history of Gauss coefficients ')
-        print()
+        print(flush=True)
 
 # initialize parameters
-    config_file = config_file
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    fname = config['Common']['filename']
-    tag = config['Common']['tag']
-    outdir = config['Common']['output_directory']
-    Verbose = config['Common'].getboolean('Verbose')
-    nskip_analysis = int(config['Common']['nskip_analysis'])
-    scaling_factor_time = float(config['Rescaling factors and units']['scaling_factor_time'])
-    scaling_factor_mag = float(config['Rescaling factors and units']['scaling_factor_mag'])
-    mag_unit = config['Rescaling factors and units']['mag unit']
-    time_unit = config['Rescaling factors and units']['time unit']
+    config_gauss = configparser.ConfigParser()
+    config_gauss.read(config_file)
+    fname = config_gauss['Common']['filename']
+    tag = config_gauss['Common']['tag']
+    outdir = config_gauss['Common']['output_directory']
+    Verbose = config_gauss['Common'].getboolean('Verbose')
+    nskip_analysis = int(config_gauss['Common']['nskip_analysis'])
+    scaling_factor_time = float(config_gauss['Rescaling factors and units']['scaling_factor_time'])
+    scaling_factor_mag = float(config_gauss['Rescaling factors and units']['scaling_factor_mag'])
+    mag_unit = config_gauss['Rescaling factors and units']['mag unit']
+    time_unit = config_gauss['Rescaling factors and units']['time unit']
 
     if rank == 0:
         if Verbose is True:
@@ -238,7 +238,7 @@ def make_gauss_history(comm, size, rank, config_file):
     if (rank == size-1):
         mysamp_end = nsamp
     if size > 1:
-        comm.Barrier()
+        ier = comm.Barrier()
     if Verbose is True:
         if rank == 0:
             print('    1D domain decomposition for processing:', flush=True)
@@ -271,16 +271,17 @@ def make_gauss_history(comm, size, rank, config_file):
         my_hlm = hlm[mask, :, :]
         my_ghlm = ghlm[mask, :]
         my_time = time[mask]-time[0] # start at t=0.
-        gauss_fname = outdir+'/'+'t_gauss_nskip%i_'%nskip+tag
-        np.savez(gauss_fname, time = my_time, glm = my_glm, hlm = my_hlm, ghlm = my_ghlm)
-        if config.has_section('Gauss coefficients') is False:
-            config.add_section('Gauss coefficients')
-        config.set('Gauss coefficients', 'ltrunc', str(ltrunc) )
-        config.set('Gauss coefficients', 'unit', gauss_unit)
-        config.set('Gauss coefficients', 'filename', gauss_fname+'.npz')
-        config.set('Common', 'gauss_done', 'True')
+        gauss_fname = 't_gauss_nskip%i_'%nskip+tag
+        np.savez(outdir+'/'+gauss_fname, time = my_time, glm = my_glm, hlm = my_hlm, ghlm = my_ghlm)
+        if config_gauss.has_section('Gauss coefficients') is False:
+            config_gauss.add_section('Gauss coefficients')
+        config_gauss.set('Gauss coefficients', 'ltrunc', str(ltrunc) )
+        config_gauss.set('Gauss coefficients', 'unit', gauss_unit)
+        config_gauss.set('Gauss coefficients', 'filename', gauss_fname+'.npz')
+        config_gauss.set('Common', 'gauss_done', 'True')
         config_file = open(config_file, 'w')
-        config.write(config_file)
+        config_gauss.write(config_file)
+        config_file.close()
 #
 def prepare_SHB_plot( comm, size, rank, config_file):
 
@@ -327,7 +328,7 @@ def prepare_SHB_plot( comm, size, rank, config_file):
     if (rank == size-1):
         mypt_end = npt
     if size > 1:
-        comm.Barrier()
+        ier = comm.Barrier()
     if Verbose is True:
         if rank == 0:
             print('    1D domain decomposition for processing:', flush=True)
@@ -358,6 +359,56 @@ def prepare_SHB_plot( comm, size, rank, config_file):
         config_file = open(config_file, 'w')
         config.write(config_file)
 
+def get_pole_latitude( comm, size, rank, config_file):
+
+    if rank == 0:
+        print()
+        print('  Computation of geomagnetic pole latitude ')
+        print()
+
+    config_file = config_file
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    Verbose = config['Common'].getboolean('Verbose')
+    fname_gauss = config['Gauss coefficients']['filename']
+    gauss_unit = config['Gauss coefficients']['unit']
+    outdir = config['Common']['output_directory']
+    ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
+    tag = config['Common']['tag']
+    time_unit = config['Rescaling factors and units']['time unit']
+
+    npzfile =  np.load(outdir+'/'+fname_gauss)
+    time = npzfile['time']
+    ghlm = npzfile['ghlm']
+
+    ntime = int ( len(time) ) # / 5 )
+    ntime_per_process = int(ntime / size)
+    mytime_beg = rank * ntime_per_process
+    mytime_end = mytime_beg + ntime_per_process
+    F_rms = np.zeros(ntime, dtype=float)
+    if (rank == size-1):
+        mytime_end = ntime
+    if size > 1:
+        ier = comm.Barrier()
+    if Verbose is True:
+        if rank == 0:
+            print('    1D domain decomposition for processing:', flush=True)
+    if Verbose is True:
+       print('        beg end ', mytime_beg, mytime_end, ' for process ', rank, flush=True)
+
+    pole_latitude = np.zeros( ntime, dtype=float)
+
+    for itime in range(mytime_beg, mytime_end):
+        g10 = ghlm[itime, 0]
+        g11 = ghlm[itime, 1]
+        h11 = ghlm[itime, 2]
+        pole_latitude[itime] = np.rad2deg( np.arctan2( g10, np.sqrt(g11**2+h11**2) )  )
+
+    if size>1:
+        pole_latitude = comm.allreduce( pole_latitude, op=MPI.SUM)
+	
+    return time, pole_latitude, time_unit
+
 def get_rms_intensity( comm, size, rank, config_file):
 
     if rank == 0:
@@ -384,7 +435,7 @@ def get_rms_intensity( comm, size, rank, config_file):
     time = npzfile['time']
     ghlm = npzfile['ghlm']
 
-    npzfile_SHB = np.load(outdir+'/'+fname_SHB)
+    npzfile_SHB = np.load(fname_SHB)
     SHBX = npzfile_SHB['SHBX']
     SHBY = npzfile_SHB['SHBY']
     SHBZ = npzfile_SHB['SHBZ']
@@ -402,7 +453,7 @@ def get_rms_intensity( comm, size, rank, config_file):
     if (rank == size-1):
         mytime_end = ntime
     if size > 1:
-        comm.Barrier()
+        ier = comm.Barrier()
     if Verbose is True:
         if rank == 0:
             print('    1D domain decomposition for processing:', flush=True)
@@ -517,7 +568,7 @@ def compute_QPM(comm, size, rank, config_file):
     ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
 
     QPMsimu = psv10_class.QPM(type='QPM_std', acro=tag)
-    npzfile = np.load(outdir+fname_gauss)
+    npzfile = np.load(outdir+'/'+fname_gauss)
     t = npzfile['time']
     ghlm_arr = npzfile['ghlm'][:,0:lmax*(lmax+2)]
     nsamp = len(t)
@@ -532,7 +583,7 @@ def compute_QPM(comm, size, rank, config_file):
         g10 = ghlm_arr[ i, 0]
         g11 = ghlm_arr[ i, 1]
         h11 = ghlm_arr[ i, 2]
-        dipole_latitude[i] = np.rad2deg(np.arctan( g10 / np.sqrt(g11**2+h11**2) ))
+        dipole_latitude[i] = np.rad2deg(np.arctan2( g10 , np.sqrt(g11**2+h11**2) ))
     #
     #Rev criterion
     #
@@ -556,7 +607,7 @@ def compute_QPM(comm, size, rank, config_file):
     nloc_tot = len(datPSV10.location)
     if rank == 0 and Verbose is True:
         print('    total number of localities = ', nloc_tot)
-    ndraw = 1600
+    ndraw = size*1000
     inc_anom = np.zeros( (ndraw, nbins), dtype=float)
     scatter_squared = np.zeros( (ndraw, nloc_tot), dtype=float)
     Vpercent = np.zeros( (ndraw), dtype=float )
@@ -653,7 +704,7 @@ def compute_QPM(comm, size, rank, config_file):
                 r_north = np.sum(n_north)
                 r_east = np.sum(n_east)
                 r_down = np.sum(n_down)
-                inc_avg = np.arctan( r_down / np.sqrt( r_north**2 + r_east**2 ) )
+                inc_avg = np.arctan2( r_down , np.sqrt( r_north**2 + r_east**2 ) )
                 inc_anom[idraw, ibin] = np.rad2deg(inc_avg - Inc_GAD)				
         Vmed = np.median(VDM, axis=None)
         VDM75, VDM25 = np.percentile(VDM, [75 ,25])
@@ -739,25 +790,33 @@ def compute_QPM(comm, size, rank, config_file):
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
-config_file = "config_revproc.ini"
+if len(sys.argv) ==1: 
+	config_file = "config_revproc.ini" # default name for configuration file
+else:
+	config_file = str(sys.argv[1])
 config = configparser.ConfigParser()
 config.read(config_file)
 ier = comm.Barrier()
 rescaling_done = config['Common'].getboolean('rescaling_done')
+gauss_done = config['Common'].getboolean('gauss_done')
+SHB_plot_done = config['Common'].getboolean('SHB_plot_done')
+outdir = config['Common']['output_directory']
 if rescaling_done is not True:
     get_rescaling_factors( comm, size, rank, config_file)
 ier = comm.Barrier()
-gauss_done = config['Common'].getboolean('gauss_done')
 if gauss_done is not True:
     make_gauss_history( comm, size, rank, config_file)
 ier = comm.Barrier()
-SHB_plot_done = config['Common'].getboolean('SHB_plot_done')
 if SHB_plot_done is not True:
     prepare_SHB_plot( comm, size, rank, config_file)
 ier = comm.Barrier()
 if config['Diags'].getboolean('rms_intensity') is True:
     time, F_rms, gauss_unit, time_unit = get_rms_intensity( comm, size, rank, config_file)
     if rank==0:
-        np.savez('F_rms', time=time, F_rms=F_rms, gauss_unit = gauss_unit, time_unit = time_unit)
+        np.savez(outdir+'/''F_rms', time=time, F_rms=F_rms, gauss_unit = gauss_unit, time_unit = time_unit)
 if config['Diags'].getboolean('QPM') is True:
 	QPM_results = compute_QPM(comm, size, rank, config_file)
+if config['Diags'].getboolean('pole_latitude') is True:
+    time, pole_lat, time_unit = get_pole_latitude( comm, size, rank, config_file)
+    if rank==0:
+        np.savez(outdir+'/'+'pole_latitude', time=time, pole_latitude=pole_lat, time_unit = time_unit)
