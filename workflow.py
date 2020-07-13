@@ -17,7 +17,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
 
 # initialize parameters
     config_file = config_file
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
     fname = config['Common']['filename']
     outdir = config['Common']['output_directory']
@@ -60,9 +60,9 @@ def get_rescaling_factors(comm, size, rank, config_file):
     nsamp = len(t)
     time = np.zeros( nsamp )
     g10 = np.zeros( nsamp )
-    sp_b = np.zeros( (ltrunc+1, nsamp) )
-    sp_bdot = np.zeros( (ltrunc+1, nsamp) )
-    tau_l = np.zeros( (ltrunc+1, nsamp) )
+    sp_b = np.zeros( (nsamp, ltrunc+1) )
+    sp_bdot = np.zeros( (nsamp, ltrunc+1) )
+    tau_l = np.zeros( (nsamp, ltrunc+1) )
     tau_sv_avg = np.zeros( ltrunc+1 )
     mask = np.zeros(nsamp, dtype=bool)
     mask[:] = False
@@ -97,9 +97,9 @@ def get_rescaling_factors(comm, size, rank, config_file):
             hlmdot = ( hlm - hlm_old ) / deltat
             for il in range(1, 14):
                 for im in range(0, il+1):
-                    sp_b[ il, i] = sp_b[ il, i] + (il+1) * ( glm[ il, im]**2 + hlm[il, im]**2 )
-                    sp_bdot[ il, i] = sp_bdot[ il, i] + (il+1) * ( glmdot[ il, im]**2 + hlmdot[il, im]**2 )
-                tau_l[il, i] = np.sqrt ( sp_b[ il, i] / sp_bdot[ il, i] )
+                    sp_b[ i, il] = sp_b[ i, il] + (il+1) * ( glm[ il, im]**2 + hlm[il, im]**2 )
+                    sp_bdot[ i,  il] = sp_bdot[ i, il] + (il+1) * ( glmdot[ il, im]**2 + hlmdot[il, im]**2 )
+                tau_l[i, il] = np.sqrt ( sp_b[ i, il] / sp_bdot[ i, il] )
         glm_old = glm
         hlm_old = hlm
         g10[i] = glm[1,0]
@@ -115,13 +115,19 @@ def get_rescaling_factors(comm, size, rank, config_file):
     if rank == 0: 
         my_g10 = g10[mask]
         my_time = time[mask]-time[0] # start at t=0. 
-        my_tau_l = tau_l[:,mask]
-        my_sp_b = sp_b[:,mask]
-        my_sp_bdot = sp_bdot[:,mask]
+        my_tau_l = tau_l[mask,:]
+        my_sp_b = sp_b[mask,:]
+        my_sp_bdot = sp_bdot[mask,:]
         if dump_spectra is True: 
-           np.savez_compressed(outdir+'/'+'extended_spectra_unprocessed_'+tag,  sp_b = my_sp_b, sp_bdot = my_sp_bdot, tau_l = my_tau_l)
+            fname = 'extended_spectra_unprocessed_'+tag
+            np.savez_compressed(outdir+'/'+fname,  sp_b = my_sp_b, sp_bdot = my_sp_bdot, tau_l = my_tau_l)
+            fname = fname+'.npz'
+            config.set('Diags', 'spectra_file', fname)
+            lfile = open(config_file, 'w')
+            config.write(lfile)
+            lfile.close()
         for il in range(1,ltrunc+1):
-            tau_sv_avg[ il] = np.sqrt( np.average(my_sp_b[:,:], axis =1)[il] / np.average(my_sp_bdot[:,:], axis =1)[il] )
+            tau_sv_avg[ il] = np.sqrt( np.average(my_sp_b[:,:], axis =0)[il] / np.average(my_sp_bdot[:,:], axis =0)[il] )
 
         def one_over_l(x,tau_sv):
 
@@ -178,7 +184,7 @@ def make_gauss_history(comm, size, rank, config_file):
         print(flush=True)
 
 # initialize parameters
-    config_gauss = configparser.ConfigParser()
+    config_gauss = configparser.ConfigParser(interpolation=None)
     config_gauss.read(config_file)
     fname = config_gauss['Common']['filename']
     tag = config_gauss['Common']['tag']
@@ -291,7 +297,7 @@ def prepare_SHB_plot( comm, size, rank, config_file):
         print()
 
     config_file = config_file
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
     Verbose = config['Common'].getboolean('Verbose')
     outdir = config['Common']['output_directory']
@@ -359,6 +365,26 @@ def prepare_SHB_plot( comm, size, rank, config_file):
         config_file = open(config_file, 'w')
         config.write(config_file)
 
+def get_transition_time( comm, size, rank, config_file):
+
+    if rank == 0:
+        print()
+        print('  Detection of polarity transitions ')
+        print()
+
+    config_file = config_file
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(config_file)
+    outdir = config['Common']['output_directory']
+    fname = outdir+'/'+config['Diags']['pole_latitude_file']	
+
+    npz = np.load(fname)
+    pole_lat = npz['pole_latitude']
+    mask_tra = ( np.abs(pole_lat) <= 45. )
+    mask_stb = ( np.abs(pole_lat) > 45. )
+
+    return mask_tra, mask_stb
+	
 def get_pole_latitude( comm, size, rank, config_file):
 
     if rank == 0:
@@ -367,7 +393,7 @@ def get_pole_latitude( comm, size, rank, config_file):
         print()
 
     config_file = config_file
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
     Verbose = config['Common'].getboolean('Verbose')
     fname_gauss = config['Gauss coefficients']['filename']
@@ -417,7 +443,7 @@ def get_rms_intensity( comm, size, rank, config_file):
         print()
 
     config_file = config_file
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
     Verbose = config['Common'].getboolean('Verbose')
     fname_gauss = config['Gauss coefficients']['filename']
@@ -557,7 +583,7 @@ def compute_QPM(comm, size, rank, config_file):
 
     # this dynamo simulation
     config_file = config_file
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
     tag = config['Common']['tag']
     Verbose = config['Common'].getboolean('Verbose')
@@ -797,7 +823,7 @@ if len(sys.argv) ==1:
 	config_file = "config_revproc.ini" # default name for configuration file
 else:
 	config_file = str(sys.argv[1])
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(interpolation=None)
 config.read(config_file)
 ier = comm.Barrier()
 rescaling_done = config['Common'].getboolean('rescaling_done')
@@ -813,13 +839,40 @@ ier = comm.Barrier()
 if SHB_plot_done is not True:
     prepare_SHB_plot( comm, size, rank, config_file)
 ier = comm.Barrier()
+config.read(config_file)
 if config['Diags'].getboolean('rms_intensity') is True:
     time, F_rms, gauss_unit, time_unit = get_rms_intensity( comm, size, rank, config_file)
     if rank==0:
-        np.savez(outdir+'/''F_rms', time=time, F_rms=F_rms, gauss_unit = gauss_unit, time_unit = time_unit)
+        fname = 'F_rms'
+        np.savez(outdir+'/'+fname, time=time, F_rms=F_rms, gauss_unit = gauss_unit, time_unit = time_unit)
+        fname = fname + '.npz'
+        config.set('Diags', 'rms_intensity_file', fname)
+        lfile = open(config_file, 'w')
+        config.write(lfile)
+        lfile.close()
+ier = comm.Barrier()
 if config['Diags'].getboolean('QPM') is True:
 	QPM_results = compute_QPM(comm, size, rank, config_file)
+ier = comm.Barrier()
 if config['Diags'].getboolean('pole_latitude') is True:
     time, pole_lat, time_unit = get_pole_latitude( comm, size, rank, config_file)
     if rank==0:
-        np.savez(outdir+'/'+'pole_latitude', time=time, pole_latitude=pole_lat, time_unit = time_unit)
+        fname = 'pole_latitude'
+        np.savez(outdir+'/'+fname, time=time, pole_latitude=pole_lat, time_unit = time_unit)
+        fname = fname + '.npz'
+        config.set('Diags', 'pole_latitude_file', fname)
+        lfile = open(config_file, 'w')
+        config.write(lfile)
+        lfile.close()
+ier = comm.Barrier()
+config.read(config_file)
+if config['Diags'].getboolean('transitional_field') is True: 
+    mask_tra, mask_tsb = get_transition_time( comm, size, rank, config_file)
+    spectra_file = config['Diags']['spectra_file'] 
+    fname = outdir+'/'+spectra_file
+    if rank == 0:
+        npz = np.load(fname)
+        sp_b = npz['sp_b']
+        print(np.shape(sp_b))
+        print(np.shape(mask_tra))
+
