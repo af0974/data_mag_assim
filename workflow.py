@@ -522,7 +522,7 @@ def compute_Delta_QPM(QPMsimu, QPMearth, Verbose=False):
         denom = (QPMearth.a_high - QPMearth.a_med) + (np.abs(QPMsimu.a_med) - np.abs(QPMsimu.a_low))
         deltaQPM_a = ( np.abs( QPMsimu.a_med) - QPMearth.a_med ) / denom
     else:
-        denom = (QPMearh.a_med - QPMearth.a_low) + (np.abs(QPMsimu.a_high) - np.abs(QPMsimu.a_med))
+        denom = (QPMearth.a_med - QPMearth.a_low) + (np.abs(QPMsimu.a_high) - np.abs(QPMsimu.a_med))
         deltaQPM_a = ( QPMearth.a_med - np.abs(QPMsimu.a_med) ) / denom
 #
     if ( np.abs(QPMsimu.b_med) > QPMearth.b_med):
@@ -867,12 +867,21 @@ if config['Diags'].getboolean('pole_latitude') is True:
 ier = comm.Barrier()
 config.read(config_file)
 if config['Diags'].getboolean('transitional_field') is True: 
-    mask_tra, mask_tsb = get_transition_time( comm, size, rank, config_file)
+    mask_tra, mask_stb = get_transition_time( comm, size, rank, config_file)
     spectra_file = config['Diags']['spectra_file'] 
     fname = outdir+'/'+spectra_file
+    scaling_factor_mag = float(config['Rescaling factors and units']['scaling_factor_mag'])
+    mag_unit = config['Rescaling factors and units']['mag unit']
     if rank == 0:
         npz = np.load(fname)
         sp_b = npz['sp_b']
         print(np.shape(sp_b))
         print(np.shape(mask_tra))
-
+        sp_b_tra = sp_b[mask_tra,:] * scaling_factor_mag**2
+        sp_b_stb = sp_b[mask_stb,:] * scaling_factor_mag**2
+        plt.semilogy(range(1,14), np.mean(sp_b_tra, axis=0)[1:14], 'o')
+        plt.semilogy(range(1,14), np.mean(sp_b_stb, axis=0)[1:14], 'x' )
+        plt.xlabel('SH degree')
+        plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
+        plt.xticks(range(1,14))
+        plt.savefig('sp.pdf')
