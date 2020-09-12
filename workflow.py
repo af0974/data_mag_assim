@@ -757,12 +757,26 @@ def compute_QPM(comm, size, rank, config_file):
         Vpercent = comm.allreduce(Vpercent, op=MPI.SUM)
         a = comm.allreduce(a, op=MPI.SUM)
         b = comm.allreduce(b, op=MPI.SUM)
+#dbg
+        scatter_squared = comm.allreduce(scatter_squared, op=MPI.SUM) 
+#       scatter_squared = np.reshape(scatter_squared, (ndraw,nloc_tot))
+#
         for ibin in range(len(bins)-1):
             inc_anom[:,ibin] = comm.allreduce(inc_anom[:,ibin], op=MPI.SUM)
 	#inspection of arrays
     Vpercent = Vpercent[np.isfinite(Vpercent)]	
     a = a[np.isfinite(a)]
     b = b[np.isfinite(b)]
+#dbg
+#   scatter_squared = scatter_squared[np.isfinite(scatter_squared)]
+    mean_Ssq = np.mean(scatter_squared, axis=0)
+    if rank == 0:
+         print(np.shape(mean_Ssq), flush=True)
+         print(np.shape(scatter_squared), flush=True)
+         Sfile = open('S_vd_mean.dat','w+')
+         for i in range(np.size(mean_Ssq)):
+              Sfile.write( '%g %g \n' % (my_latitude_in_deg[i], mean_Ssq[i] ) )
+         Sfile.close()
     
     QPMsimu.Vpercent_med = np.median( Vpercent)
     QPMsimu.Vpercent_low = np.percentile( Vpercent, 2.5)
@@ -879,9 +893,37 @@ if config['Diags'].getboolean('transitional_field') is True:
         print(np.shape(mask_tra))
         sp_b_tra = sp_b[mask_tra,:] * scaling_factor_mag**2
         sp_b_stb = sp_b[mask_stb,:] * scaling_factor_mag**2
-        plt.semilogy(range(1,14), np.mean(sp_b_tra, axis=0)[1:14], 'o')
-        plt.semilogy(range(1,14), np.mean(sp_b_stb, axis=0)[1:14], 'x' )
+        plt.semilogy(range(1,14), np.mean(sp_b_tra, axis=0)[1:14], 'o', label='transitional')
+        plt.semilogy(range(1,14), np.mean(sp_b_stb, axis=0)[1:14], 'x', label='stable' )
         plt.xlabel('SH degree')
         plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
         plt.xticks(range(1,14))
-        plt.savefig('sp.pdf')
+        plt.legend(loc='best')
+        plt.savefig('sp_a.pdf')
+        plt.close()
+        a = 6371.2 
+        c = 3485.0
+        for il in range(1,14):
+            sp_b_tra[:,il] = (a/c)**(2*il+4) *  sp_b_tra[:,il]
+            sp_b_stb[:,il] = (a/c)**(2*il+4) *  sp_b_stb[:,il]
+        plt.semilogy(range(1,14), np.mean(sp_b_tra, axis=0)[1:14], 'o', label='transitional')
+        plt.semilogy(range(1,14), np.mean(sp_b_stb, axis=0)[1:14], 'x', label='stable' )
+        plt.xlabel('SH degree')
+        plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
+        plt.xticks(range(1,14))
+        plt.legend(loc='best')
+        plt.savefig('sp_c.pdf')
+        plt.close()
+        for iens in range(np.shape(sp_b_tra)[0]):
+        	plt.semilogy(range(1,14), sp_b_tra[iens,1:14], color='r',lw=0.1, alpha=0.3)
+        for iens in range(np.shape(sp_b_tra)[0]):
+        	plt.semilogy(range(1,14), sp_b_stb[iens,1:14], color='b' ,lw=0.1, alpha=0.3)
+        plt.semilogy(range(1,14), np.mean(sp_b_tra, axis=0)[1:14], 'o', label='transitional', color='r')
+        plt.semilogy(range(1,14), np.mean(sp_b_stb, axis=0)[1:14], 'x', label='stable', color='b' )
+        plt.xlabel('SH degree')
+        plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
+        plt.xticks(range(1,14))
+        plt.legend(loc='best')
+        plt.savefig('sp_c_ens.pdf')
+        plt.close()
+
