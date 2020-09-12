@@ -564,6 +564,96 @@ def compute_Delta_QPM(QPMsimu, QPMearth, Verbose=False):
         print( ' DeltaQPM is %10.2f ' %(np.sum(DeltaQPM) ) )
         print( ' QPM is %i ' % (np.sum(mask) ) )
 
+def compute_mean_VGP( VGP_lat, VGP_lon):
+#
+    l = np.cos(np.deg2rad(VGP_lat)) * np.cos(np.deg2rad(VGP_lon))
+    m = np.cos(np.deg2rad(VGP_lat)) * np.sin(np.deg2rad(VGP_lon))
+    n = np.sin(np.deg2rad(VGP_lat))
+    r = np.sqrt( np.sum(l, axis=-1)**2 + np.sum(m, axis=-1)**2 + np.sum(n, axis=-1)**2 )
+    l_site = np.sum(l, axis=-1) / r
+    m_site = np.sum(m, axis=-1) / r
+    n_site = np.sum(n, axis=-1) / r
+
+    VGP_lam_avg = np.arcsin(n_site)
+    VGP_phi_avg = np.arctan2(m_site,l_site)
+    VGP_lat_avg = np.rad2deg(VGP_lam_avg)
+    VGP_lon_avg = np.mod(np.rad2deg(VGP_phi_avg), 360.)
+
+    return VGP_lat_avg, VGP_lon_avg
+
+def compute_S( VGP_lat, VGP_lon, VGP_lat_avg, VGP_lon_avg):
+#
+    delta = angular_distance_2sphere( VGP_lat, VGP_lon, \
+                                      np.transpose(np.tile(VGP_lat_avg, (np.shape(VGP_lat)[-1],1))), \
+                                      np.transpose(np.tile(VGP_lon_avg, (np.shape(VGP_lon)[-1],1))), Verbose=False)
+
+    ASD = np.sqrt(np.sum(delta**2,axis=-1)/(np.shape(delta)[-1]-1))
+    return ASD
+
+def compute_Svd( VGP_lat, VGP_lon, VGP_lat_avg, VGP_lon_avg):
+#   For future vectorized version
+    """
+#
+    delta = angular_distance_2sphere( VGP_lat, VGP_lon, \
+                                      np.transpose(np.tile(VGP_lat_avg, (np.shape(VGP_lat)[-1],1))), \
+                                      np.transpose(np.tile(VGP_lon_avg, (np.shape(VGP_lon)[-1],1))), Verbose=False)
+
+    ASD = np.sqrt(np.sum(delta**2,axis=-1)/(np.shape(delta)[-1]-1))
+    A = (1.8 * ASD + 5.)
+    delta_max = np.max(delta, axis=-1)
+    Ndat = np.ones( len(delta_max), dtype=int)
+    for i in range(len(delta_max)):
+        VGP_lat_loc = VGP_lat[i,:]
+        VGP_lon_loc = VGP_lon[i,:]
+        Aloc = A[i]
+        ASD_loc = ASD[i]
+        dmax_loc = delta_max[i]
+        delta_loc = delta[i,:]
+        Ndat_loc = Ndat[i]
+        while dmax_loc > Aloc:
+            mask_delta = ( delta_loc < dmax_loc )
+            VGP_lat_loc = VGP_lat_loc[ mask_delta ]
+            VGP_lon_loc = VGP_lon_loc[ mask_delta ]
+            VGP_lat_avg_loc, VGP_lon_avg_loc = compute_mean_VGP( VGP_lat_loc, VGP_lon_loc)
+            delta_loc = angular_distance_2sphere( VGP_lat_loc, VGP_lon_loc, \
+                                      VGP_lat_avg_loc * np.ones( (len(VGP_lat_loc)), dtype=float), \
+                                      VGP_lon_avg_loc * np.ones( (len(VGP_lon_loc)), dtype=float), Verbose=False)
+            ASD_loc = np.sqrt( np.sum(delta_loc**2)/(np.shape(delta_loc)[0]-1) )
+            Aloc = 1.8 * ASD_loc + 5.
+            dmax_loc = np.max(delta_loc)
+            Ndat_loc = len(delta_loc)
+        ASD[i] = ASD_loc
+        A[i] = Aloc
+        Ndat[i] = Ndat_loc
+    """
+
+    VGP_lat_loc = VGP_lat
+    VGP_lon_loc = VGP_lon
+    VGP_lat_avg_loc, VGP_lon_avg_loc = compute_mean_VGP( VGP_lat_loc, VGP_lon_loc)
+    delta_loc = angular_distance_2sphere( VGP_lat_loc, VGP_lon_loc, \
+                                  VGP_lat_avg_loc * np.ones( (len(VGP_lat_loc)), dtype=float), \
+                                  VGP_lon_avg_loc * np.ones( (len(VGP_lon_loc)), dtype=float), Verbose=False)
+    ASD_loc = np.sqrt( np.sum(delta_loc**2)/(np.shape(delta_loc)[0]-1) )
+    Aloc = 1.8 * ASD_loc + 5.
+    dmax_loc = np.max(delta_loc)
+    Ndat_loc = len(delta_loc)
+    while dmax_loc > Aloc:
+        mask_delta = ( delta_loc < dmax_loc )
+        VGP_lat_loc = VGP_lat_loc[ mask_delta ]
+        VGP_lon_loc = VGP_lon_loc[ mask_delta ]
+        VGP_lat_avg_loc, VGP_lon_avg_loc = compute_mean_VGP( VGP_lat_loc, VGP_lon_loc)
+        delta_loc = angular_distance_2sphere( VGP_lat_loc, VGP_lon_loc, \
+                                  VGP_lat_avg_loc * np.ones( (len(VGP_lat_loc)), dtype=float), \
+                                  VGP_lon_avg_loc * np.ones( (len(VGP_lon_loc)), dtype=float), Verbose=False)
+        ASD_loc = np.sqrt( np.sum(delta_loc**2)/(np.shape(delta_loc)[0]-1) )
+        Aloc = 1.8 * ASD_loc + 5.
+        dmax_loc = np.max(delta_loc)
+        Ndat_loc = len(delta_loc)
+    ASD = ASD_loc
+    A = Aloc
+    Ndat = Ndat_loc
+
+    return ASD,  A, Ndat
 
 def compute_QPM(comm, size, rank, config_file):
     import psv10_class 
@@ -707,8 +797,12 @@ def compute_QPM(comm, size, rank, config_file):
                             VGP_phi[istep] = my_longitude_in_deg[iloc] + beta[istep]
                         else:
                             VGP_phi[istep] = my_longitude_in_deg[iloc] + 180. - beta[istep]
+                        if ( VGP_lam[istep] < 0. ):
+                            VGP_lam[istep] = -1. * VGP_lam[istep]
+                            VGP_phi[istep] = VGP_phi[istep] + 180.
                     VGP_lat = np.rad2deg(VGP_lam)
                     VGP_lon = np.mod(VGP_phi, 360.)
+                    VGP_lat_avg, VGP_lon_avg = compute_mean_VGP( VGP_lat, VGP_lon)
                     if n_north is None:
                         n_north =  X/F
                         n_east =  Y/F
@@ -717,6 +811,7 @@ def compute_QPM(comm, size, rank, config_file):
                         n_north = np.concatenate( (n_north, X/F), axis=None)
                         n_east = np.concatenate( (n_east, Y/F), axis=None)
                         n_down = np.concatenate( (n_down, Z/F), axis=None)
+                    """
                     delta = 90. - VGP_lat
                     ASD = np.sqrt(np.sum(delta**2)/(np.shape(delta)[0]-1))
                     A = 1.8 * ASD + 5.
@@ -729,6 +824,9 @@ def compute_QPM(comm, size, rank, config_file):
                         delta_max = np.max(delta)
                     scatter_squared[idraw, iloc_glob] = np.sum(delta**2)/(np.shape(delta)[0]-1)
 				# Nuts and bolts of paleomagnetism, Cox & Hart, page 310
+                    """
+                    Svd, cutoff, Ndat = compute_Svd( VGP_lat, VGP_lon, VGP_lat_avg, VGP_lon_avg)
+                    scatter_squared[idraw, iloc_glob] = Svd**2
                 r_north = np.sum(n_north)
                 r_east = np.sum(n_east)
                 r_down = np.sum(n_down)
