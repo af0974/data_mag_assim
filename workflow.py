@@ -129,7 +129,7 @@ def compute_chi2(comm, size, rank, config_file):
     if rank == 0:
         print()
         print('			AD_OVER_NAD = ', np.mean(ad_over_nad))
-        print('			O_OVER_O = ', np.mean(O_over_E))
+        print('			O_OVER_E = ', np.mean(O_over_E))
         print('			Z_OVER_NZ = ', np.mean(z_over_nz))
         print('			Flux Conc. Fact. = ', np.mean(fcf))
         print()
