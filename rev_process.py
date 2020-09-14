@@ -44,13 +44,12 @@ def compute_ghlm_from_glmhlm(glm, hlm):
 #   glm, hlm: the SH expansion of br at the surface of the dynamo region
 #
 
-    ltrunc = np.size(glm)[0] + 1
+    ltrunc = np.shape(glm)[0]-1 
     ghlm =  np.zeros( ltrunc * ( ltrunc + 2) , dtype=float)
     lm = -1
 
     for il in range(1,ltrunc+1):
-        fact = ((il+1)/np.sqrt(2*il+1))*(a/c)**(il+2)
-        for im in range(0,il+1,azsym):
+        for im in range(0,il+1):
             if im == 0:
                 lm = lm + 1
                 ghlm[lm] = glm[il,im]
