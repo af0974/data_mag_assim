@@ -346,14 +346,10 @@ def make_gauss_history(comm, size, rank, config_file):
     nskip = nskip_analysis
 #
     t = raw[::nskip,0]
-    """
     keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
     t = t[keep]
-    """
     br_lm = (raw[::nskip,1::2] + 1j*raw[::nskip,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
-    """
     br_lm = br_lm[keep,:]
-    """
     sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
     sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
 
@@ -860,7 +856,7 @@ def compute_QPM(comm, size, rank, config_file):
     nloc_tot = len(datPSV10.location)
     if rank == 0 and Verbose is True:
         print('    total number of localities = ', nloc_tot)
-    ndraw = 10000
+    ndraw = 100000 
     inc_anom = np.zeros( (ndraw, nbins), dtype=float)
     scatter_squared = np.zeros( (ndraw, nloc_tot), dtype=float)
     Vpercent = np.zeros( (ndraw), dtype=float )
