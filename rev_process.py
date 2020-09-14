@@ -77,6 +77,63 @@ def compute_glmhlm_from_brlm(br_lm, sh, ltrunc = None, bscale = None):
 
     return glm, hlm, ghlm
 
+def compute_brlm_from_glmhlm(glm, hlm, sh, ltrunc = None, bscale =None, radius=None):
+#
+#   inputs :
+#   glm, hlm: the Gauss coefficients expressed in nanoTeslas
+#   sh: the current shtns framework
+#
+    a = 6371.2
+    c = 3485. # default value for radius where br_lm is estimated
+    if radius != None:
+        c = radius
+
+    azsym = sh.mres
+    if ltrunc == None:
+        ltrunc = sh.lmax
+
+    br_lm = sh.spec_array()
+
+    for il in range(1,ltrunc+1):
+        for im in range(0,il+1,azsym):
+            fact = ((il+1)/np.sqrt(2*il+1))*(a/c)**(il+2)
+            br_lm[sh.idx(il,im)] = fact * complex ( glm[il,im] , -1. * hlm[il,im] )
+
+    if bscale != None:
+        br_lm = bscale * br_lm
+
+    return br_lm
+
+def compute_brlm_from_glmhlm(glm, hlm, sh, ltrunc = None, bscale =None, radius=None):
+#
+#   inputs :
+#   glm, hlm: the Gauss coefficients expressed in nanoTeslas
+#   sh: the current shtns framework
+#
+    a = 6371.2
+    c = 3485. # default value for radius where br_lm is estimated
+    if radius != None:
+        c = radius
+
+    azsym = sh.mres
+    if ltrunc == None:
+        ltrunc = sh.lmax
+
+    br_lm = sh.spec_array()
+
+    for il in range(1,ltrunc+1):
+        for im in range(0,il+1,azsym):
+            fact = ((il+1)/np.sqrt(2*il+1))*(a/c)**(il+2)
+            br_lm[sh.idx(il,im)] = fact * complex ( glm[il,im] , -1. * hlm[il,im] )
+
+    if bscale != None:
+        br_lm = bscale * br_lm
+
+    return br_lm
+
+
+
+
 def mollweide_dual_surface(F,Z,theta,phi,fname=None,vmax1=None,vmin1=None,vmax2=None,vmin2=None,Title1=None, Title2=None,\
 positive1=False, positive2=False, cmap1=None, cmap2=None):
 

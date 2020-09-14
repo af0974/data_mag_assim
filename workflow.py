@@ -8,6 +8,136 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from mpi4py import MPI
 
+
+def compute_chi2_components(comm, size, rank, config_file):
+
+    if rank == 0:
+        print()
+        print('  Computing Earth-likeness components according to Christensen et al. (EPSL, 2010) ')
+        print()
+	
+    config_file = config_file
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(config_file)
+    Verbose = config['Common'].getboolean('Verbose')
+    fname_gauss = config['Gauss coefficients']['filename']
+    gauss_unit = config['Gauss coefficients']['unit']
+    outdir = config['Common']['output_directory']
+    ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
+    tag = config['Common']['tag']
+    time_unit = config['Rescaling factors and units']['time unit']
+
+    npzfile =  np.load(outdir+'/'+fname_gauss)
+    time = npzfile['time']
+    glm = npzfile['glm']
+    hlm = npzfile['hlm'] 
+
+    a = 6371.2
+    c = 3485.
+    ltrunc = 8
+    sh_par = shtns.sht(9, 9, norm=shtns.sht_fourpi | shtns.SHT_NO_CS_PHASE | shtns.SHT_REAL_NORM)
+    sh_par.set_grid(nlat=48, nphi=96)
+    ad_over_nad = np.zeros_like(time, dtype=float)
+    O_over_E = np.zeros_like(time, dtype=float)
+    z_over_nz = np.zeros_like(time, dtype=float)
+    fcf = np.zeros_like(time, dtype=float)
+#
+# mpi 1D domain decomposition
+    nsamp = len(time)
+    nsamp_per_process = int(nsamp / size)
+    mysamp_beg = rank * nsamp_per_process
+    mysamp_end = mysamp_beg + nsamp_per_process
+    if (rank == size-1):
+        mysamp_end = nsamp
+    if size > 1:
+        ier = comm.Barrier()
+    if Verbose is True:
+        if rank == 0:
+            print('    1D domain decomposition for processing:', flush=True)
+    if Verbose is True:
+       print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
+
+    #for itime in range(len(time)):
+    for itime in range(mysamp_beg, mysamp_end):
+    	if np.mod(itime+1-mysamp_beg, int(nsamp_per_process/10)) == 0 and Verbose is True:
+             if rank==0:
+                 print('        rank ', rank, ' performed ', itime+1-mysamp_beg, ' analyses', flush=True)
+	# AD/NAD ratio
+    	nad = 0. 
+    	nad = nad + 2.*(glm[itime,1,1]**2 + hlm[itime,1,1]**2)
+    	for il in range(2,ltrunc+1):
+    		toto = 0.
+    		for im in range(0,il+1):
+    			toto = toto + (glm[itime,il,im]**2+hlm[itime,il,im]**2)
+    		nad = nad + (il+1.) * (a/c)**(2.*il-2.)*toto
+    	ad_over_nad[itime] = (2.* glm[itime, 1,0]**2 ) / nad
+
+	# Equatorial symmetry
+    	odd = 0.
+    	even = 0. 
+    	for il in range(2,ltrunc+1):
+    		for im in range(0,il+1):
+    			if ( (il+im) % 2 == 0 ):
+    				even = even + (a/c)**(2*il-2) * (il+1.) * (glm[itime,il,im]**2+hlm[itime,il,im]**2)
+    			else:
+    				odd  = odd + (a/c)**(2*il-2) * (il+1.) * (glm[itime,il,im]**2+hlm[itime,il,im]**2)
+    	O_over_E[itime] = odd / even
+	# Zonality
+    	zonal = 0.
+    	nonzonal = 0.
+    	for il in range(2,ltrunc+1):
+    		zonal = zonal + (a/c)**(2*il-2) * (il+1.) * (glm[itime,il,0]**2+hlm[itime,il,0]**2)
+    		#print(zonal, glm[itime,il,0], hlm[itime,il,0])
+    		for im in range(1,il+1):
+    			nonzonal = nonzonal + (a/c)**(2*il-2) * (il+1.) * (glm[itime,il,im]**2+hlm[itime,il,im]**2)
+    			#print(nonzonal, glm[itime,il,im], hlm[itime,il,im])
+    	z_over_nz[itime] = zonal / nonzonal
+	# Flux concentration factor
+	# need br_lm_trunc at degree 8
+    	br_lm_trunc = revpro.compute_brlm_from_glmhlm(glm[itime,:,:], hlm[itime,:,:], sh_par, ltrunc = ltrunc, bscale =None, radius=None)
+    	br2_rms = np.sum( (np.abs(br_lm_trunc))**2 )
+    	brf = sh_par.synth(br_lm_trunc)
+    	brf2 = brf*brf
+    	br2_lm = sh_par.analys(brf2)
+    	br4_rms = np.sum( (np.abs(br2_lm))**2 )
+    	fcf[itime] = (br4_rms - br2_rms**2) / br2_rms**2   
+
+    if size>1:
+        ad_over_nad = comm.allreduce( ad_over_nad, op=MPI.SUM)
+        O_over_E = comm.allreduce( O_over_E, op=MPI.SUM)
+        z_over_nz = comm.allreduce( z_over_nz, op=MPI.SUM)
+        fcf = comm.allreduce( fcf, op=MPI.SUM)
+
+    return ad_over_nad, O_over_E, z_over_nz, fcf
+
+def compute_chi2(comm, size, rank, config_file):
+
+    ad_over_nad, O_over_E, z_over_nz, fcf = compute_chi2_components(comm, size, rank, config_file)
+#   Earth values are there
+    ad_over_nad_earth = 1.4
+    O_over_E_earth = 1.
+    z_over_nz_earth = 0.15
+    fcf_earth = 1.5
+    static_chi2 = ( np.log(np.mean(ad_over_nad)/ad_over_nad_earth) / np.log(2.0) ) **2 \
+                 +( np.log(np.mean(O_over_E)/O_over_E_earth) / np.log(2.0) ) **2 \
+                 +( np.log(np.mean(z_over_nz)/z_over_nz_earth) / np.log(2.5) ) **2 \
+                 +( np.log(np.mean(fcf)/fcf_earth) / np.log(1.75) ) **2
+    all_chi2 =    ( np.log(ad_over_nad/ad_over_nad_earth) / np.log(2.0) ) **2 \
+                 +( np.log(O_over_E/O_over_E_earth) / np.log(2.0) ) **2 \
+                 +( np.log(z_over_nz/z_over_nz_earth) / np.log(2.5) ) **2 \
+                 +( np.log(fcf/fcf_earth) / np.log(1.75) ) **2
+    if rank == 0:
+        print()
+        print('			AD_OVER_NAD = ', np.mean(ad_over_nad))
+        print('			O_OVER_O = ', np.mean(O_over_E))
+        print('			Z_OVER_NZ = ', np.mean(z_over_nz))
+        print('			Flux Conc. Fact. = ', np.mean(fcf))
+        print()
+        print('  	 chi2 = ', static_chi2)
+        print(' 	 median  chi2 over time = ', np.median(all_chi2))
+
+    return static_chi2
+
 def get_rescaling_factors(comm, size, rank, config_file):
 
     if rank == 0:
@@ -56,7 +186,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
     sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
     if rank == 0 and Verbose is True:
         print('    total number of samples = ', len(t))
-#nsamp = int( len(t)/1000)
+# nsamp = int( len(t)/1000)
     nsamp = len(t)
     time = np.zeros( nsamp )
     g10 = np.zeros( nsamp )
@@ -66,10 +196,10 @@ def get_rescaling_factors(comm, size, rank, config_file):
     tau_sv_avg = np.zeros( ltrunc+1 )
     mask = np.zeros(nsamp, dtype=bool)
     mask[:] = False
-#one_percent = nsamp/100
+# one_percent = nsamp/100
     t_max = -0.1
 #
-#mpi 1D domain decomposition
+# mpi 1D domain decomposition
     nsamp_per_process = int( nsamp / size)
     mysamp_beg = rank * nsamp_per_process
     mysamp_end = mysamp_beg + nsamp_per_process
@@ -216,10 +346,14 @@ def make_gauss_history(comm, size, rank, config_file):
     nskip = nskip_analysis
 #
     t = raw[::nskip,0]
+    """
     keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
     t = t[keep]
+    """
     br_lm = (raw[::nskip,1::2] + 1j*raw[::nskip,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
+    """
     br_lm = br_lm[keep,:]
+    """
     sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
     sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
 
@@ -237,7 +371,7 @@ def make_gauss_history(comm, size, rank, config_file):
     mask = np.zeros(nsamp, dtype=bool)
     mask[:] = False
 #
-#mpi 1D domain decomposition
+# mpi 1D domain decomposition
     nsamp_per_process = int(nsamp / size)
     mysamp_beg = rank * nsamp_per_process
     mysamp_end = mysamp_beg + nsamp_per_process
@@ -258,6 +392,9 @@ def make_gauss_history(comm, size, rank, config_file):
         if mag_unit == 'mT':
             bscale = 1.e6
             gauss_unit = 'nT'
+        else:
+            bscale = None
+            gauss_unit = 'ND'
         glm[ i, :, :], hlm[ i, :, :], ghlm[ i, :] = revpro.compute_glmhlm_from_brlm( br_lm_schmidt, sh_schmidt, ltrunc = ltrunc, bscale = bscale)
         time[i] = t[i]
         deltat = t[i] - t[i-1]
@@ -701,15 +838,15 @@ def compute_QPM(comm, size, rank, config_file):
         h11 = ghlm_arr[ i, 2]
         dipole_latitude[i] = np.rad2deg(np.arctan2( g10 , np.sqrt(g11**2+h11**2) ))
     #
-    #Rev criterion
+    # Rev criterion
     #
-    #"normal" polarity 
+    # "normal" polarity 
     mask_n = dipole_latitude > 45.
     tau_n = np.sum(time_intervals[mask_n]) / simulation_time
-    #"reverse" polarity
+    # "reverse" polarity
     mask_r = dipole_latitude < -45.
     tau_r = np.sum(time_intervals[mask_r]) / simulation_time
-    #excursion time
+    # excursion time
     mask_t = np.abs(dipole_latitude) < 45.
     tau_t = np.sum(time_intervals[mask_t]) / simulation_time
 
@@ -732,7 +869,7 @@ def compute_QPM(comm, size, rank, config_file):
     empty_bin[:] = True
     r_earth = 6371.2e3
     vdm_fact = 1.e7 * r_earth**3
-   #mpi 1D domain decomposition
+   # mpi 1D domain decomposition
     ndraw_per_process = int(ndraw / size)
     mydraw_beg = rank * ndraw_per_process
     mydraw_end = mydraw_beg + ndraw_per_process
@@ -767,7 +904,7 @@ def compute_QPM(comm, size, rank, config_file):
                 for iloc in range(my_nloc):
                     iloc_glob = iloc_glob + 1
                     nsite = my_number_of_sites[iloc]
-                    #take nsite random samples
+                    # take nsite random samples
                     timesteps = random.sample(range(nsamp), nsite)
                     VGP_lat = []
                     VGP_lon = []
@@ -844,28 +981,28 @@ def compute_QPM(comm, size, rank, config_file):
         mask_test = np.isfinite(my_scatter_squared)
         my_scatter_squared = my_scatter_squared[mask_test]
         my_latitude_in_deg = datPSV10.latitude_in_deg[mask_test]
-        #popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared, check_finite=True, p0=[25.,0.5], method='dogbox', bounds=([0.,0.],[100.,1.]))
+        # popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared, check_finite=True, p0=[25.,0.5], method='dogbox', bounds=([0.,0.],[100.,1.]))
         popt, pcov = curve_fit( quadratic_disp, np.abs(my_latitude_in_deg), my_scatter_squared, check_finite=True, p0=[25.,0.5], bounds=([0.,0.],[100.,2.]))
         a[idraw] = np.abs(popt[0])
         b[idraw] = np.abs(popt[1])
 	#
-	#Global gather if draw done in parallel
-    #Vpercent
+	# Global gather if draw done in parallel
+    # Vpercent
     if size>1:
         Vpercent = comm.allreduce(Vpercent, op=MPI.SUM)
         a = comm.allreduce(a, op=MPI.SUM)
         b = comm.allreduce(b, op=MPI.SUM)
-#dbg
+# dbg
         scatter_squared = comm.allreduce(scatter_squared, op=MPI.SUM) 
 #       scatter_squared = np.reshape(scatter_squared, (ndraw,nloc_tot))
 #
         for ibin in range(len(bins)-1):
             inc_anom[:,ibin] = comm.allreduce(inc_anom[:,ibin], op=MPI.SUM)
-	#inspection of arrays
+	# inspection of arrays
     Vpercent = Vpercent[np.isfinite(Vpercent)]	
     a = a[np.isfinite(a)]
     b = b[np.isfinite(b)]
-#dbg
+# dbg
 #   scatter_squared = scatter_squared[np.isfinite(scatter_squared)]
     mean_Ssq = np.mean(scatter_squared, axis=0)
     if rank == 0:
@@ -917,7 +1054,7 @@ def compute_QPM(comm, size, rank, config_file):
         print()
         print('QPMsimu.delta_Inc_med = %10.2f QPMsimu.delta_Inc_low = %10.2f  QPMsimu.delta_Inc_high = %10.2f '\
         % (QPMsimu.delta_Inc_med, QPMsimu.delta_Inc_low, QPMsimu.delta_Inc_high))
-	#to complete
+	# to complete
 
     Verbose = False
     if rank == 0:
@@ -965,6 +1102,9 @@ if config['Diags'].getboolean('rms_intensity') is True:
 ier = comm.Barrier()
 if config['Diags'].getboolean('QPM') is True:
 	QPM_results = compute_QPM(comm, size, rank, config_file)
+ier = comm.Barrier()
+if config['Diags'].getboolean('chi2') is True:
+	chi2_value = compute_chi2(comm, size, rank, config_file)
 ier = comm.Barrier()
 if config['Diags'].getboolean('pole_latitude') is True:
     time, pole_lat, time_unit = get_pole_latitude( comm, size, rank, config_file)
