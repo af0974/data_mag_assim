@@ -856,7 +856,7 @@ def compute_QPM(comm, size, rank, config_file):
     nloc_tot = len(datPSV10.location)
     if rank == 0 and Verbose is True:
         print('    total number of localities = ', nloc_tot)
-    ndraw = 100000 
+    ndraw = 10000 
     inc_anom = np.zeros( (ndraw, nbins), dtype=float)
     scatter_squared = np.zeros( (ndraw, nloc_tot), dtype=float)
     Vpercent = np.zeros( (ndraw), dtype=float )
