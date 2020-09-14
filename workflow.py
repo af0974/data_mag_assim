@@ -1000,14 +1000,14 @@ def compute_QPM(comm, size, rank, config_file):
     b = b[np.isfinite(b)]
 # dbg
 #   scatter_squared = scatter_squared[np.isfinite(scatter_squared)]
-    mean_Ssq = np.mean(scatter_squared, axis=0)
-    if rank == 0:
-         print(np.shape(mean_Ssq), flush=True)
-         print(np.shape(scatter_squared), flush=True)
-         Sfile = open('S_vd_mean.dat','w+')
-         for i in range(np.size(mean_Ssq)):
-              Sfile.write( '%g %g \n' % (my_latitude_in_deg[i], mean_Ssq[i] ) )
-         Sfile.close()
+#   mean_Ssq = np.mean(scatter_squared, axis=0)
+#   if rank == 0:
+#        print(np.shape(mean_Ssq), flush=True)
+#        print(np.shape(scatter_squared), flush=True)
+#        Sfile = open('S_vd_mean.dat','w+')
+#        for i in range(np.size(mean_Ssq)):
+#             Sfile.write( '%g %g \n' % (my_latitude_in_deg[i], mean_Ssq[i] ) )
+#        Sfile.close()
     
     QPMsimu.Vpercent_med = np.median( Vpercent)
     QPMsimu.Vpercent_low = np.percentile( Vpercent, 2.5)
