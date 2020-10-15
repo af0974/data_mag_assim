@@ -849,6 +849,8 @@ def compute_QPM(comm, size, rank, config_file):
     QPMsimu.taut = tau_t
     QPMsimu.taur = tau_r
     QPMsimu.taun = tau_n
+    if rank == 0 and Verbose is True:
+        print('     tau_t = ', tau_t)
 	
     nbins = 19
     bins = np.linspace( -90, 90, nbins)
@@ -1133,7 +1135,7 @@ if config['Diags'].getboolean('transitional_field') is True:
         plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
         plt.xticks(range(1,14))
         plt.legend(loc='best')
-        plt.savefig('sp_a.pdf')
+        plt.savefig(outdir+'/'+'sp_a.pdf')
         plt.close()
         a = 6371.2 
         c = 3485.0
@@ -1146,7 +1148,7 @@ if config['Diags'].getboolean('transitional_field') is True:
         plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
         plt.xticks(range(1,14))
         plt.legend(loc='best')
-        plt.savefig('sp_c.pdf')
+        plt.savefig(outdir+'/'+'sp_c.pdf')
         plt.close()
         for iens in range(np.shape(sp_b_tra)[0]):
         	plt.semilogy(range(1,14), sp_b_tra[iens,1:14], color='r',lw=0.1, alpha=0.3)
@@ -1158,6 +1160,6 @@ if config['Diags'].getboolean('transitional_field') is True:
         plt.ylabel(r'B$^2$ in '+mag_unit+'$^2$')
         plt.xticks(range(1,14))
         plt.legend(loc='best')
-        plt.savefig('sp_c_ens.pdf')
+        plt.savefig(outdir+'/'+'sp_c_ens.pdf')
         plt.close()
 
