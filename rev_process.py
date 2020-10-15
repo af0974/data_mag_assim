@@ -38,6 +38,29 @@ def filter_br(br_in, sh_parody,ltrunc):
     br_out = sh_parody.synth(ylm_out)
     return br_out
 
+def compute_ghlm_from_glmhlm(glm, hlm):
+#
+#   inputs :
+#   glm, hlm: the SH expansion of br at the surface of the dynamo region
+#
+
+    ltrunc = np.shape(glm)[0]-1 
+    ghlm =  np.zeros( ltrunc * ( ltrunc + 2) , dtype=float)
+    lm = -1
+
+    for il in range(1,ltrunc+1):
+        for im in range(0,il+1):
+            if im == 0:
+                lm = lm + 1
+                ghlm[lm] = glm[il,im]
+            else:
+                lm = lm + 1
+                ghlm[lm] = glm[il, im]
+                lm = lm + 1
+                ghlm[lm] = hlm[il, im]
+
+    return ghlm
+
 def compute_glmhlm_from_brlm(br_lm, sh, ltrunc = None, bscale = None):
 #
 #   inputs :
