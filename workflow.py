@@ -594,7 +594,7 @@ def get_rms_intensity( comm, size, rank, config_file):
     time = npzfile['time']
     ghlm = npzfile['ghlm']
 
-    npzfile_SHB = np.load(fname_SHB)
+    npzfile_SHB = np.load(outdir+'/'+fname_SHB)
     SHBX = npzfile_SHB['SHBX']
     SHBY = npzfile_SHB['SHBY']
     SHBZ = npzfile_SHB['SHBZ']
