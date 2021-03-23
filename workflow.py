@@ -544,7 +544,6 @@ def get_pole_latitude( comm, size, rank, config_file):
     ntime_per_process = int(ntime / size)
     mytime_beg = rank * ntime_per_process
     mytime_end = mytime_beg + ntime_per_process
-    F_rms = np.zeros(ntime, dtype=float)
     if (rank == size-1):
         mytime_end = ntime
     if size > 1:
@@ -567,6 +566,72 @@ def get_pole_latitude( comm, size, rank, config_file):
         pole_latitude = comm.allreduce( pole_latitude, op=MPI.SUM)
 	
     return time, pole_latitude, time_unit
+
+def get_eccentricity( comm, size, rank, config_file):
+
+    if rank == 0:
+        print()
+        print('  Computation of dipole eccentricity ')
+        print()
+
+    config_file = config_file
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(config_file)
+    Verbose = config['Common'].getboolean('Verbose')
+    fname_gauss = config['Gauss coefficients']['filename']
+    gauss_unit = config['Gauss coefficients']['unit']
+    outdir = config['Common']['output_directory']
+    ltrunc_gauss = int(config['Gauss coefficients']['ltrunc'])
+    tag = config['Common']['tag']
+    time_unit = config['Rescaling factors and units']['time unit']
+
+    npzfile =  np.load(outdir+'/'+fname_gauss)
+    time = npzfile['time']
+    ghlm = npzfile['ghlm']
+
+    ntime = int ( len(time) ) # / 5 )
+    ntime_per_process = int(ntime / size)
+    mytime_beg = rank * ntime_per_process
+    mytime_end = mytime_beg + ntime_per_process
+    if (rank == size-1):
+        mytime_end = ntime
+    if size > 1:
+        ier = comm.Barrier()
+    if Verbose is True:
+        if rank == 0:
+            print('    1D domain decomposition for processing:', flush=True)
+    if Verbose is True:
+       print('        beg end ', mytime_beg, mytime_end, ' for process ', rank, flush=True)
+
+    sc = np.zeros( ntime, dtype=float)
+    zc = np.zeros( ntime, dtype=float)
+    a = 6371.2 # mean Earth radius
+
+    for itime in range(mytime_beg, mytime_end):
+        g10 = ghlm[itime, 0]
+        g11 = ghlm[itime, 1]
+        h11 = ghlm[itime, 2]
+        g20 = ghlm[itime, 3]
+        g21 = ghlm[itime, 4]
+        h21 = ghlm[itime, 5]
+        g22 = ghlm[itime, 6]
+        h22 = ghlm[itime, 7]
+        # Gallet et al. EPSL 2009 (appendix)
+        L0 =  2. * g10 * g20 + np.sqrt(3.) * ( g11 * g21 + h11 * h21             )
+        L1 = -1. * g11 * g20 + np.sqrt(3.) * ( g10 * g21 + g11 * g22 + h11 * h22 )
+        L2 = -1. * h11 * g20 + np.sqrt(3.) * ( g10 * h21 + g11 * h22 - h11 * g22 )
+        m2 = g10**2 + g11**2 + h11**2 
+        E = ( L0 * g10 + L1 * g11 + L2 * h11  )/ ( 4. * m2 )
+        xc = a * ( L1 - E * g11 ) / (3. * m2 )
+        yc = a * ( L2 - E * h11 ) / (3. * m2 )
+        zc[itime] = a * ( L0 - E * g10 ) / (3. * m2 )
+        sc[itime] = np.sqrt( xc**2 + yc**2 )
+
+    if size>1:
+        sc = comm.allreduce( sc, op=MPI.SUM)
+        zc = comm.allreduce( zc, op=MPI.SUM)
+	
+    return time, sc, zc, time_unit
 
 def get_rms_intensity( comm, size, rank, config_file):
 
@@ -1111,6 +1176,17 @@ if config['Diags'].getboolean('pole_latitude') is True:
         np.savez(outdir+'/'+fname, time=time, pole_latitude=pole_lat, time_unit = time_unit)
         fname = fname + '.npz'
         config.set('Diags', 'pole_latitude_file', fname)
+        lfile = open(config_file, 'w')
+        config.write(lfile)
+        lfile.close()
+ier = comm.Barrier()
+if config['Diags'].getboolean('eccentricity') is True:
+    time, sc, zc, time_unit = get_eccentricity( comm, size, rank, config_file)
+    if rank==0:
+        fname = 'eccentricity'
+        np.savez(outdir+'/'+fname, time=time, s_ecc=sc, z_ecc=zc, time_unit = time_unit)
+        fname = fname + '.npz'
+        config.set('Diags', 'eccentricity_file', fname)
         lfile = open(config_file, 'w')
         config.write(lfile)
         lfile.close()
