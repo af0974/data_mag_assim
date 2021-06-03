@@ -284,6 +284,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
             plt.legend(loc='best')
             plt.tight_layout()
             plt.savefig(outdir+'/'+'sv_timescale'+tag+'.pdf')
+            plt.close()
 
         g10_mean = np.mean(abs(g10))
         vadm_earth = 7.46*1.e22
