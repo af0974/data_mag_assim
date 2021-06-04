@@ -107,6 +107,12 @@ def compute_chi2_components(comm, size, rank, config_file):
         O_over_E = comm.allreduce( O_over_E, op=MPI.SUM)
         z_over_nz = comm.allreduce( z_over_nz, op=MPI.SUM)
         fcf = comm.allreduce( fcf, op=MPI.SUM)
+    # safety net with z_over_nz that can go inf during transients
+    mask = ~np.isinf(z_over_nz)
+    ad_over_nad = ad_over_nad[mask]
+    O_over_E = O_over_E[mask]
+    z_over_nz = z_over_nz[mask]
+    fcf = fcf[mask]
 
     return ad_over_nad, O_over_E, z_over_nz, fcf
 
