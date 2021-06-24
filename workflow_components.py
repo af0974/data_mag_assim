@@ -643,7 +643,7 @@ def get_pole_latitude( comm, size, rank, config_file):
         lfile.close()
 
     if rank==0:
-        #distibute plot over 4 rows
+        #distibute plot over 3 rows
         nrows = 3
         ndat = len(time)
         nstep = int( ndat / nrows )
@@ -738,6 +738,29 @@ def get_eccentricity( comm, size, rank, config_file):
         lfile = open(config_file, 'w')
         config.write(lfile)
         lfile.close()
+
+    if rank==0:
+        #distibute plot over 3 rows
+        nrows = 3
+        ndat = len(time)
+        nstep = int( ndat / nrows )
+        yticks = np.linspace( -90, 90, 5, dtype=float)
+        fig, ax = plt.subplots( nrows, 1, figsize=(15,6), sharey=True)
+        for i in range(nrows):
+            istart = i * nstep
+            if i < nrows -1:
+                iend = istart + nstep
+            else:
+                iend = ndat-1
+            ax[i].plot( time[istart:iend], sc[istart:iend], label='s_c')
+            ax[i].plot( time[istart:iend], zc[istart:iend], label='z_c')
+            ax[i].set_xlim(time[istart],time[iend])
+            ax[i].set_ylabel('km')
+            ax[i].legend(loc='best')
+        ax[nrows-1].set_xlabel('time in ' + time_unit)
+        plt.savefig(outdir+'/eccentricity.pdf')
+        plt.savefig(outdir+'/eccentricity.png')
+
 	
     return time, sc, zc, time_unit
 
@@ -811,6 +834,28 @@ def get_rms_intensity( comm, size, rank, config_file):
         lfile = open(config_file, 'w')
         config.write(lfile)
         lfile.close()
+
+    if rank==0:
+        #distibute plot over 3 rows
+        nrows = 3
+        ndat = len(time)
+        nstep = int( ndat / nrows )
+        #yticks = np.linspace( -90, 90, 5, dtype=float)
+        fig, ax = plt.subplots( nrows, 1, figsize=(15,6), sharey=True)
+        for i in range(nrows):
+            istart = i * nstep
+            if i < nrows -1:
+                iend = istart + nstep
+            else:
+                iend = ndat-1
+            ax[i].plot( time[istart:iend], F_rms[istart:iend])
+            ax[i].set_xlim(time[istart],time[iend])
+            #ax[i].set_yticks(yticks)
+            ax[i].set_ylabel('rms Intensity in ' + gauss_unit)
+        ax[nrows-1].set_xlabel('time in ' + time_unit)
+        plt.savefig(outdir+'/F_rms.pdf')
+        plt.savefig(outdir+'/F_rms.png')
+
         
     return time, F_rms, gauss_unit, time_unit    
 
