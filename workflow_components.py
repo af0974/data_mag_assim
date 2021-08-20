@@ -663,6 +663,7 @@ def get_pole_latitude( comm, size, rank, config_file):
         ax[nrows-1].set_xlabel('time in ' + time_unit)
         plt.savefig(outdir+'/pole_latitude.pdf')
         plt.savefig(outdir+'/pole_latitude.png')
+        plt.close()
 	
     return time, pole_latitude, time_unit
 
@@ -760,6 +761,7 @@ def get_eccentricity( comm, size, rank, config_file):
         ax[nrows-1].set_xlabel('time in ' + time_unit)
         plt.savefig(outdir+'/eccentricity.pdf')
         plt.savefig(outdir+'/eccentricity.png')
+        plt.close()
 
 	
     return time, sc, zc, time_unit
@@ -855,6 +857,7 @@ def get_rms_intensity( comm, size, rank, config_file):
         ax[nrows-1].set_xlabel('time in ' + time_unit)
         plt.savefig(outdir+'/F_rms.pdf')
         plt.savefig(outdir+'/F_rms.png')
+        plt.close()
 
         
     return time, F_rms, gauss_unit, time_unit    
