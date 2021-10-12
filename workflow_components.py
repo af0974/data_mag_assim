@@ -154,94 +154,177 @@ def get_rescaling_factors(comm, size, rank, config_file):
     config_file = config_file
     config = configparser.ConfigParser(interpolation=None)
     config.read(config_file)
-    fname = config['Common']['filename']
+    dynamo_code = config['Common']['dynamo_code']
     outdir = config['Common']['output_directory']
     tag = config['Common']['tag']
     Verbose = config['Common'].getboolean('Verbose')
     dump_spectra = config['Rescaling'].getboolean('dump_spectra')
     plot_tausv = config['Rescaling'].getboolean('plot_tausv')
-    percent = int(config['Rescaling']['percent_scales'])
+
+    ltrunc = 13
 
     if rank == 0: 
         if Verbose is True: 
             print('    mpi parallel size is ', size)
+            print('    dynamo code is ', dynamo_code)
 
-    if Verbose is True and rank==0: 
-        print('    filename is ', fname)
-    raw = np.fromfile(fname, dtype=np.float64)
-    ltrunc = 13
-    sh = shtns.sht(13)
-    sh_schmidt = shtns.sht(13, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
-    nlm = shtns.nlm_calc(13,13,1)
-    raw = raw.reshape((-1,2*nlm+1))
-    raw.shape
+    if dynamo_code == "xshells": 
+        percent = int(config['Rescaling']['percent_scales'])
+        fname = config['Common']['filename'] # in case xshells is post-processed
+
+        if Verbose is True and rank==0: 
+            print('    filename is ', fname)
+        raw = np.fromfile(fname, dtype=np.float64)
+        sh = shtns.sht(13)
+        sh_schmidt = shtns.sht(13, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
+        nlm = shtns.nlm_calc(13,13,1)
+        raw = raw.reshape((-1,2*nlm+1))
+        raw.shape
 #
-    if Verbose is True and rank==0:
-        print('    considering the first ', percent,' percent of data to establish rescaling factors', flush=True)
-    tag = tag+'_'+str(percent)+'%'
+        if Verbose is True and rank==0:
+            print('    considering the first ', percent,' percent of data to establish rescaling factors', flush=True)
+        tag = tag+'_'+str(percent)+'%'
 #
-    twork = raw[:,0]
-    end = int( percent * len(twork) / 100 )
-    t = raw[:end,0]
-    keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
-    t = t[keep]
-    br_lm = (raw[:end,1::2] + 1j*raw[:end,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
-    br_lm = br_lm[keep,:]
-    sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
-    sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
-    if rank == 0 and Verbose is True:
-        print('    total number of samples = ', len(t))
+        twork = raw[:,0]
+        end = int( percent * len(twork) / 100 )
+        t = raw[:end,0]
+        keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
+        t = t[keep]
+        br_lm = (raw[:end,1::2] + 1j*raw[:end,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
+        br_lm = br_lm[keep,:]
+        sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
+        sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
+        if rank == 0 and Verbose is True:
+            print('    total number of samples = ', len(t))
 # nsamp = int( len(t)/1000)
-    nsamp = len(t)
-    time = np.zeros( nsamp )
-    g10 = np.zeros( nsamp )
-    sp_b = np.zeros( (nsamp, ltrunc+1) )
-    sp_bdot = np.zeros( (nsamp, ltrunc+1) )
-    tau_l = np.zeros( (nsamp, ltrunc+1) )
-    tau_sv_avg = np.zeros( ltrunc+1 )
-    mask = np.zeros(nsamp, dtype=bool)
-    mask[:] = False
+        nsamp = len(t)
+        time = np.zeros( nsamp )
+        g10 = np.zeros( nsamp )
+        sp_b = np.zeros( (nsamp, ltrunc+1) )
+        sp_bdot = np.zeros( (nsamp, ltrunc+1) )
+        tau_l = np.zeros( (nsamp, ltrunc+1) )
+        tau_sv_avg = np.zeros( ltrunc+1 )
+        mask = np.zeros(nsamp, dtype=bool)
+        mask[:] = False
 # one_percent = nsamp/100
-    t_max = -0.1
+        t_max = -0.1
 #
 # mpi 1D domain decomposition
-    nsamp_per_process = int( nsamp / size)
-    mysamp_beg = rank * nsamp_per_process
-    mysamp_end = mysamp_beg + nsamp_per_process
-    if (rank == size-1):
-        mysamp_end = nsamp
-    if size >1:
-        comm.Barrier()
-    if Verbose is True:
-        if rank == 0: 
-            print('    1D domain decomposition for processing:', flush=True)
-    if Verbose is True:
-       print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
+        nsamp_per_process = int( nsamp / size)
+        mysamp_beg = rank * nsamp_per_process
+        mysamp_end = mysamp_beg + nsamp_per_process
+        if (rank == size-1):
+            mysamp_end = nsamp
+        if size >1:
+            comm.Barrier()
+        if Verbose is True:
+            if rank == 0: 
+                print('    1D domain decomposition for processing:', flush=True)
+        if Verbose is True:
+           print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
 ###
 #
-    for i in range(mysamp_beg,mysamp_end):
-        br = sh.synth(br_lm[i,:])
-        br_lm_schmidt = sh_schmidt.analys(br)
-        glm, hlm, ghlm = revpro.compute_glmhlm_from_brlm( br_lm_schmidt, sh_schmidt, ltrunc = None, bscale = None)
-        time[i] = t[i]
-        deltat = t[i] - t[i-1]
-        test = (deltat > 0. and (i > mysamp_beg) )
-        if test is True:
-            mask[i] = True
-            glmdot = ( glm - glm_old ) / deltat
-            hlmdot = ( hlm - hlm_old ) / deltat
-            for il in range(1, 14):
-                for im in range(0, il+1):
-                    sp_b[ i, il] = sp_b[ i, il] + (il+1) * ( glm[ il, im]**2 + hlm[il, im]**2 )
-                    sp_bdot[ i,  il] = sp_bdot[ i, il] + (il+1) * ( glmdot[ il, im]**2 + hlmdot[il, im]**2 )
-                tau_l[i, il] = np.sqrt ( sp_b[ i, il] / sp_bdot[ i, il] )
-        glm_old = glm
-        hlm_old = hlm
-        g10[i] = glm[1,0]
+        for i in range(mysamp_beg,mysamp_end):
+            br = sh.synth(br_lm[i,:])
+            br_lm_schmidt = sh_schmidt.analys(br)
+            glm, hlm, ghlm = revpro.compute_glmhlm_from_brlm( br_lm_schmidt, sh_schmidt, ltrunc = None, bscale = None)
+            time[i] = t[i]
+            deltat = t[i] - t[i-1]
+            test = (deltat > 0. and (i > mysamp_beg) )
+            if test is True:
+                mask[i] = True
+                glmdot = ( glm - glm_old ) / deltat
+                hlmdot = ( hlm - hlm_old ) / deltat
+                for il in range(1, 14):
+                    for im in range(0, il+1):
+                        sp_b[ i, il] = sp_b[ i, il] + (il+1) * ( glm[ il, im]**2 + hlm[il, im]**2 )
+                        sp_bdot[ i,  il] = sp_bdot[ i, il] + (il+1) * ( glmdot[ il, im]**2 + hlmdot[il, im]**2 )
+                    tau_l[i, il] = np.sqrt ( sp_b[ i, il] / sp_bdot[ i, il] )
+            glm_old = glm
+            hlm_old = hlm
+            g10[i] = glm[1,0]
+#
+    elif dynamo_code == "parody":
+#
+        ltrunc = 12
+        import parody_toolbox_wf as ptool
+        import glob
+        path = config['Parody']['data_location']
+        fname = config['Parody']['surface_fname']
+        files = glob.glob( path + '/' + fname )
+        nlat, nphi, time, br, dbrdt = ptool.get_data_from_S_file(files[rank], Verbose=False)
+        sh_schmidt = shtns.sht(ltrunc, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
+        sh_schmidt.set_grid(nlat=nlat, nphi=nphi)
+        #sh = shtns.sht( lmax, mmax, mres, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
+        #sh.set_grid(nlat, nphi)
+        theta = np.arccos(sh_schmidt.cos_theta)
+        phi =  (2. * np.pi / np.float(nphi))*np.arange(nphi) - np.pi
+        #revpro.mollweide_surface(br, theta, phi, fname=None, vmax=None, vmin=None, Title=None, positive=False, cmap=None, unit="nondim")
+        nsamp = len(files)
+        if Verbose is True:
+            print('number of surface files', nsamp)
+        time = np.zeros( nsamp )
+        g10 = np.zeros( nsamp )
+        br = np.zeros( (nsamp, nlat, nphi) )
+        dbrdt = np.zeros( (nsamp, nlat, nphi) )
+        sp_b = np.zeros( (nsamp, ltrunc+1) )
+        sp_bdot = np.zeros( (nsamp, ltrunc+1) )
+        tau_l = np.zeros( (nsamp, ltrunc+1) )
+        tau_sv_avg = np.zeros( ltrunc+1 )
+        mask = np.zeros(nsamp, dtype=bool)
+        mask[:] = False
+        # mpi 1D domain decomposition
+        nsamp_per_process = int( nsamp / size)
+        mysamp_beg = rank * nsamp_per_process
+        mysamp_end = mysamp_beg + nsamp_per_process
+        if (rank == size-1):
+            mysamp_end = nsamp
+        if size >1:
+            comm.Barrier()
+        if Verbose is True:
+            if rank == 0:
+                print('    1D domain decomposition for processing:', flush=True)
+        if Verbose is True:
+           print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
+###
+        for i in range(mysamp_beg,mysamp_end):
+            nlat, nphi, this_time, this_br, this_dbrdt = ptool.get_data_from_S_file(files[i], Verbose=False)
+            time[i] = this_time
+            br[i,:,:] = this_br[:,:]
+            dbrdt[i,:,:] = this_dbrdt[:,:]
+        if size > 1:
+            time = comm.allreduce( time, op=MPI.SUM)
+            br = comm.allreduce( br, op=MPI.SUM)
+            dbrdt = comm.allreduce( dbrdt, op=MPI.SUM)
+        time = time[ np.argsort(time) ]
+        br = br[ np.argsort(time) ]
+        dbrdt = dbrdt[ np.argsort(time) ]
+
+        for i in range( mysamp_beg, mysamp_end):
+            br_lm = sh_schmidt.analys( br[i,:,:] )
+            glm, hlm, ghlm = revpro.compute_glmhlm_from_brlm(br_lm, sh_schmidt, ltrunc = ltrunc, bscale = None)
+            brdot_lm = sh_schmidt.analys( dbrdt[i,:,:] )
+            glmdot, hlmdot, ghlmdot = revpro.compute_glmhlm_from_brlm(brdot_lm, sh_schmidt, ltrunc = ltrunc, bscale = None)
+            test = True
+            if test is True:
+                mask[i] = True
+                for il in range(1, ltrunc+1):
+                    for im in range(0, il+1):
+                        sp_b[ i, il] = sp_b[ i, il] + (il+1) * ( glm[ il, im]**2 + hlm[il, im]**2 )
+                        sp_bdot[ i,  il] = sp_bdot[ i, il] + (il+1) * ( glmdot[ il, im]**2 + hlmdot[il, im]**2 )
+                    tau_l[i, il] = np.sqrt ( sp_b[ i, il] / sp_bdot[ i, il] )
+                """    
+                plt.semilogy( np.arange(1, 14), sp_b[i, 1:14], label='field')
+                plt.semilogy( np.arange(1, 14), sp_bdot[i, 1:14], label='SV')
+                plt.semilogy( np.arange(1, 14), tau_l[i, 1:14], label=r'$\tau_\ell$')
+                plt.legend()
+                plt.show()
+                sys.exit()
+                """
+            g10[i] = glm[1,0]
 
     if size>1:
         g10 = comm.allreduce(g10, op=MPI.SUM)
-        time = comm.allreduce(time, op=MPI.SUM)
         tau_l = comm.allreduce(tau_l, op=MPI.SUM)
         mask = comm.allreduce(mask, op=MPI.SUM)
         sp_b = comm.allreduce(sp_b, op=MPI.SUM)
@@ -269,11 +352,11 @@ def get_rescaling_factors(comm, size, rank, config_file):
             return tau_sv / x
 
 # fit with a 1 / ell law for tau_ell
-        popt, pcov = curve_fit(one_over_l, np.arange(2, 14), tau_sv_avg[2:14])
+        popt, pcov = curve_fit(one_over_l, np.arange(2, ltrunc+1), tau_sv_avg[2:ltrunc+1])
         if Verbose is True: 
             print('    secular variation time scales ')
             print('       {}      {}    {}'.format('SH degree', 'tau_l', 'tau_sv / l') ) 
-            for il in range(2,14):
+            for il in range(2,ltrunc+1):
                 print('           {:2d}    {:>10f}     {:>10f}'.format(il, tau_sv_avg[il], float(one_over_l(il, popt))) ) 
         scaling_factor_time = float( 415. / popt)
         if Verbose is True: 
@@ -288,7 +371,7 @@ def get_rescaling_factors(comm, size, rank, config_file):
             plt.xlabel('spherical harmonic degree $\ell$')
             plt.legend(loc='best')
             plt.tight_layout()
-            plt.savefig(outdir+'/'+'sv_timescale'+tag+'.pdf')
+            plt.savefig(outdir+'/'+'sv_timescale_'+tag+'.pdf')
             plt.close()
 
         g10_mean = np.mean(abs(g10))
@@ -301,6 +384,8 @@ def get_rescaling_factors(comm, size, rank, config_file):
             print( '        magnetic field conversion factor (to obtain mT) = ', scaling_factor_mag)
             print( '        time average abs(g10) = {:>3f} nT'.format( scaling_factor_mag * 1e6 * g10_mean) )
         np.savez(outdir+'/'+'conversion_factors_'+tag, scaling_factor_time = scaling_factor_time, scaling_factor_mag = scaling_factor_mag) 
+
+
         if config.has_section('Rescaling factors and units') is False: 
 	        config.add_section('Rescaling factors and units')
         config.set('Rescaling factors and units', 'scaling_factor_mag', str(scaling_factor_mag))
@@ -322,6 +407,7 @@ def make_gauss_history(comm, size, rank, config_file):
 # initialize parameters
     config_gauss = configparser.ConfigParser(interpolation=None)
     config_gauss.read(config_file)
+    dynamo_code = config_gauss['Common']['dynamo_code']
     fname = config_gauss['Common']['filename']
     tag = config_gauss['Common']['tag']
     outdir = config_gauss['Common']['output_directory']
@@ -341,35 +427,57 @@ def make_gauss_history(comm, size, rank, config_file):
             print('        scaling_factor_time', scaling_factor_time)
             print('        scaling_factor_mag', scaling_factor_mag)
 
-    raw = np.fromfile(fname, dtype=np.float64)
-    ltrunc = 13
-    sh = shtns.sht(13)
-    sh_schmidt = shtns.sht(13, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
-    nlm = shtns.nlm_calc(13,13,1)
-    raw = raw.reshape((-1,2*nlm+1))
-    raw.shape
-#
-    nskip = nskip_analysis
-#
-    t = raw[::nskip,0]
-    keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
-    t = t[keep]
-    br_lm = (raw[::nskip,1::2] + 1j*raw[::nskip,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
-    br_lm = br_lm[keep,:]
-    sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
-    sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
 
-    if rank == 0 and Verbose is True:
-        print('    total number of samples = ', len(t))
+    if dynamo_code == "xshells": 
 
-    nsamp = len(t)
-    t = t * scaling_factor_time
-    br_lm = br_lm * scaling_factor_mag
+        raw = np.fromfile(fname, dtype=np.float64)
+        ltrunc = 13
+        sh = shtns.sht(13)
+        sh_schmidt = shtns.sht(13, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
+        nlm = shtns.nlm_calc(13,13,1)
+        raw = raw.reshape((-1,2*nlm+1))
+        raw.shape
+#
+        nskip = nskip_analysis
+#
+        t = raw[::nskip,0]
+        keep = revpro.clean_series(t, Verbose=Verbose, myrank=rank)
+        t = t[keep]
+        br_lm = (raw[::nskip,1::2] + 1j*raw[::nskip,2::2])*sh.l*(sh.l+1)   # multiply by l(l+1)
+        br_lm = br_lm[keep,:]
+        sh.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
+        sh_schmidt.set_grid(nlat=48, nphi=96)#, flags=shtns.sht_reg_poles)
+
+        if rank == 0 and Verbose is True:
+            print('    total number of samples = ', len(t))
+
+        nsamp = len(t)
+        t = t * scaling_factor_time
+        br_lm = br_lm * scaling_factor_mag
+
+    elif dynamo_code == "parody":
+#
+        ltrunc = 13
+        import parody_toolbox_wf as ptool
+        import glob
+        path = config_gauss['Parody']['data_location']
+        fname = config_gauss['Parody']['surface_fname']
+        files = glob.glob( path + '/' +fname )
+        nlat, nphi, time, br, dbrdt = ptool.get_data_from_S_file(files[rank], Verbose=False)
+        sh_schmidt = shtns.sht(ltrunc, norm=shtns.sht_fourpi | shtns.SHT_REAL_NORM)
+        sh_schmidt.set_grid(nlat=nlat, nphi=nphi)
+        theta = np.arccos(sh_schmidt.cos_theta)
+        phi =  (2. * np.pi / np.float(nphi))*np.arange(nphi) - np.pi
+        nsamp = len(files)
+        if Verbose is True:
+            print('number of surface files', nsamp)
 
     glm = np.zeros( (nsamp, ltrunc+1, ltrunc+1) )
     hlm = np.zeros( (nsamp, ltrunc+1, ltrunc+1) )
     ghlm = np.zeros( (nsamp, ltrunc *(ltrunc+2) ) )
     time = np.zeros( nsamp )
+    if dynamo_code == "parody":
+        br = np.zeros( (nsamp, nlat, nphi), dtype=float)
     mask = np.zeros(nsamp, dtype=bool)
     mask[:] = False
 #
@@ -388,21 +496,44 @@ def make_gauss_history(comm, size, rank, config_file):
        print('        beg end ', mysamp_beg, mysamp_end, ' for process ', rank, flush=True)
 
 ###
-    for i in range(mysamp_beg,mysamp_end):
-        br = sh.synth(br_lm[i,:])
-        br_lm_schmidt = sh_schmidt.analys(br)
-        if mag_unit == 'mT':
-            bscale = 1.e6
-            gauss_unit = 'nT'
-        else:
-            bscale = None
-            gauss_unit = 'ND'
-        glm[ i, :, :], hlm[ i, :, :], ghlm[ i, :] = revpro.compute_glmhlm_from_brlm( br_lm_schmidt, sh_schmidt, ltrunc = ltrunc, bscale = bscale)
-        time[i] = t[i]
-        deltat = t[i] - t[i-1]
-        test = (deltat > 0. and (i > mysamp_beg) )
-        if test == True:
-             mask[i] = True
+    if dynamo_code == "xshells": 
+        for i in range(mysamp_beg,mysamp_end):
+            br = sh.synth(br_lm[i,:])
+            br_lm_schmidt = sh_schmidt.analys(br)
+            if mag_unit == 'mT':
+                bscale = 1.e6
+                gauss_unit = 'nT'
+            else:
+                bscale = None
+                gauss_unit = 'ND'
+            glm[ i, :, :], hlm[ i, :, :], ghlm[ i, :] = revpro.compute_glmhlm_from_brlm( br_lm_schmidt, sh_schmidt, ltrunc = ltrunc, bscale = bscale)
+            time[i] = t[i]
+            deltat = t[i] - t[i-1]
+            test = (deltat > 0. and (i > mysamp_beg) )
+            if test == True:
+                 mask[i] = True
+    elif dynamo_code == "parody":
+        for i in range(mysamp_beg,mysamp_end):
+            nlat, nphi, this_time, this_br, this_dbrdt = ptool.get_data_from_S_file(files[i], Verbose=False)
+            time[i] = this_time
+            br[i,:,:] = this_br[:,:]
+        if size > 1:
+            time = comm.allreduce( time, op=MPI.SUM)
+            br = comm.allreduce( br, op=MPI.SUM)
+        time = time[ np.argsort(time) ] * scaling_factor_time
+        br = br[ np.argsort(time) ] * scaling_factor_mag
+
+        for i in range( mysamp_beg, mysamp_end):
+            br_lm = sh_schmidt.analys( br[i,:,:] )
+            mask[i] = True
+            if mag_unit == 'mT':
+                bscale = 1.e6
+                gauss_unit = 'nT'
+            else:
+                bscale = None
+                gauss_unit = 'ND'
+            glm[ i, :, :], hlm[ i, :, :], ghlm[ i, :] = revpro.compute_glmhlm_from_brlm(br_lm, sh_schmidt, ltrunc = ltrunc, bscale = bscale)
+        
 
     if size>1:
         glm = comm.allreduce(glm, op=MPI.SUM)
@@ -416,7 +547,10 @@ def make_gauss_history(comm, size, rank, config_file):
         my_hlm = hlm[mask, :, :]
         my_ghlm = ghlm[mask, :]
         my_time = time[mask]-time[0] # start at t=0.
-        gauss_fname = 't_gauss_nskip%i_'%nskip+tag
+        if dynamo_code == "xshells":
+            gauss_fname = 't_gauss_nskip%i_'%nskip+tag
+        elif dynamo_code == "parody":
+            gauss_fname = 't_gauss_'+tag
         np.savez(outdir+'/'+gauss_fname, time = my_time, glm = my_glm, hlm = my_hlm, ghlm = my_ghlm)
         if config_gauss.has_section('Gauss coefficients') is False:
             config_gauss.add_section('Gauss coefficients')

@@ -2,7 +2,7 @@ import sys
 import struct		# to read crazy fortran records
 import numpy as np
 import rev_process as rp
-fname='St=4.581502720.ref1_s4'
+fname='St=1.013268414.long'
 job_out = 'parody'
 
 
@@ -62,4 +62,4 @@ F = np.reshape( Br, (nlat,nlon) )
 theta = colat
 phi = 2.*np.pi * np.linspace(0, 1, nlon, endpoint=False)
 print(phi)
-rp.mollweide_surface(F, theta, phi, fname=None, vmax=None, vmin=None, Title=None, positive=False, cmap=None)
+rp.mollweide_surface(F, theta, phi, fname='br_'+fname, vmax=None, vmin=None, Title=None, positive=False, cmap=None, unit="nondim")

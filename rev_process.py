@@ -230,7 +230,7 @@ positive1=False, positive2=False, cmap1=None, cmap2=None):
     plt.close()
     return vmax1, vmax2
 
-def mollweide_surface(F,theta,phi,fname=None,vmax=None,vmin=None,Title=None, positive=False, cmap=None):
+def mollweide_surface(F,theta,phi,fname=None,vmax=None,vmin=None,Title=None, positive=False, cmap=None, unit=None):
 
     lats = .5 * np.pi - theta
     lats = np.rad2deg(lats)
@@ -263,7 +263,10 @@ def mollweide_surface(F,theta,phi,fname=None,vmax=None,vmin=None,Title=None, pos
     plt.tight_layout()
     cax = fig.add_axes([0.05, .1, .9, 0.05])
     cm = fig.colorbar(m, cax=cax, ticks=ticks, orientation='horizontal', )
-    cm.set_label(r"$\mu$T")
+    if unit is None:
+        cm.set_label(r"$\mu$T")
+    else:
+        cm.set_label(unit)
     plt.tight_layout()
     if fname is not None:
        plt.savefig(fname+'.png')
