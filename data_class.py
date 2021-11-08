@@ -95,6 +95,10 @@ class DataTable:
         self.sigma = np.hstack( ( titi, toto, tutu) )  
         self.month = np.zeros_like(self.year)
         self.day = np.zeros_like(self.year)
+        titi = np.array(data['source'][mask_inten]).astype(str)
+        toto = np.array(data['source'][mask_decl]).astype(str)
+        tutu = np.array(data['source'][mask_inc]).astype(str)
+        self.source = np.hstack( ( titi, toto, tutu) )
 
     def read_histmag_complete(self,fileName):
         datatype = ([
