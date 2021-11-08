@@ -489,6 +489,12 @@ def make_gauss_history(comm, size, rank, config_file):
         mysamp_end = nsamp
     if size > 1:
         ier = comm.Barrier()
+        samp_beg = np.zeros( size, dtype=int)
+        samp_end = np.zeros( size, dtype=int)
+        samp_beg[rank] = mysamp_beg
+        samp_end[rank] = mysamp_end
+        samp_beg = comm.allreduce(samp_beg, op=MPI.SUM)
+        samp_end = comm.allreduce(samp_end, op=MPI.SUM)
     if Verbose is True:
         if rank == 0:
             print('    1D domain decomposition for processing:', flush=True)
@@ -534,13 +540,47 @@ def make_gauss_history(comm, size, rank, config_file):
                 gauss_unit = 'ND'
             glm[ i, :, :], hlm[ i, :, :], ghlm[ i, :] = revpro.compute_glmhlm_from_brlm(br_lm, sh_schmidt, ltrunc = ltrunc, bscale = bscale)
         
-
     if size>1:
-        glm = comm.allreduce(glm, op=MPI.SUM)
-        hlm = comm.allreduce(hlm, op=MPI.SUM)
-        ghlm = comm.allreduce(ghlm, op=MPI.SUM)
-        mask = comm.allreduce(mask, op=MPI.SUM)
-        time = comm.allreduce(time, op=MPI.SUM)
+        ier = comm.Barrier()
+        if rank==0:
+            for sender in range(1,size):
+                data = comm.recv(source=sender, tag=sender)
+                print('glm sender=', sender, 'shape=',np.shape(data))
+                glm[ samp_beg[sender]:samp_end[sender] ] = data
+        else:
+            comm.send(glm[mysamp_beg:mysamp_end], dest=0, tag=rank)
+        ier = comm.Barrier()
+        if rank==0:
+            for sender in range(1,size):
+                data = comm.recv(source=sender, tag=sender)
+                print('hlm sender=', sender, 'shape=',np.shape(data))
+                hlm[ samp_beg[sender]:samp_end[sender] ] = data
+        else:
+            comm.send(hlm[mysamp_beg:mysamp_end], dest=0, tag=rank)
+        ier = comm.Barrier()
+        if rank==0:
+            for sender in range(1,size):
+                data = comm.recv(source=sender, tag=sender)
+                print('ghlm sender=', sender, 'shape=',np.shape(data))
+                ghlm[ samp_beg[sender]:samp_end[sender] ] = data
+        else:
+            comm.send(ghlm[mysamp_beg:mysamp_end], dest=0, tag=rank)
+        ier = comm.Barrier()
+        if rank==0:
+            for sender in range(1,size):
+                data = comm.recv(source=sender, tag=sender)
+                print('sender=', sender, 'shape=',np.shape(data))
+                mask[ samp_beg[sender]:samp_end[sender] ] = data
+        else:
+            comm.send(mask[mysamp_beg:mysamp_end], dest=0, tag=rank)
+        ier = comm.Barrier()
+        if rank==0:
+            for sender in range(1,size):
+                data = comm.recv(source=sender, tag=sender)
+                print('sender=', sender, 'shape=',np.shape(data))
+                time[ samp_beg[sender]:samp_end[sender] ] = data
+        else:
+            comm.send(time[mysamp_beg:mysamp_end], dest=0, tag=rank)
 
     if rank == 0:
         my_glm = glm[mask, :, :]
