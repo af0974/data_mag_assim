@@ -1,7 +1,6 @@
 import sys
 import numpy as np
 import copy
-from datetime import datetime as dt
 
 class DataTable:
 
@@ -104,7 +103,7 @@ class DataTable:
         ('posdyear', float),
         ('negdyear', float),
         ('dating_meth', 'S100'), 
-        ('dyearCalc', 'S30'),
+        ('dyearCalc', 'S18'),
         ('month', float),
 	('day', float),
         ('hour', 'S8'),
@@ -173,6 +172,7 @@ class DataTable:
         # not taking the hour into account yet, but when we do it, consider day-1       
         self.posdyear = data['posdyear']
         self.negdyear = data['negdyear']
+        self.dyearCalc = data['dyearCalc']
         self.lat = data['lat']
         self.lon = data['lon']
         self.decl = data['decl']
@@ -211,6 +211,10 @@ class DataTable:
         toto = np.array(data['negdyear'][mask_decl])
         tutu = np.array(data['negdyear'][mask_inc])
         self.negdyear = np.hstack( ( titi, toto, tutu) )
+        titi = np.array(data['dyearCalc'][mask_inten])
+        toto = np.array(data['dyearCalc'][mask_decl])
+        tutu = np.array(data['dyearCalc'][mask_inc])
+        self.dyearCalc = np.hstack( ( titi, toto, tutu) )
         titi = np.array(data['lat'][mask_inten])
         toto = np.array(data['lat'][mask_decl])
         tutu = np.array(data['lat'][mask_inc])
@@ -266,6 +270,7 @@ class DataTable:
         self.negdyear = np.zeros_like(data['year'])
         self.month = np.zeros_like(data['year'])
         self.day = np.zeros_like(data['year'])
+        self.dyearCalc = np.zeros_like(data['year'])
 
     def __add__(self, new):
         out = copy.deepcopy(new)
@@ -275,6 +280,7 @@ class DataTable:
         out.day = np.hstack( ( self.day, new.day ) )
         out.posdyear = np.hstack( ( self.posdyear, new.posdyear ) )
         out.negdyear = np.hstack( ( self.negdyear, new.negdyear ) )
+        out.dyearCalc = np.hstack( ( self.dyearCalc, new.dyearCalc ) )
         out.lat = np.hstack( ( self.lat, new.lat ) )
         out.lon = np.hstack( ( self.lon, new.lon ) )
         out.element = np.hstack( ( self.element, new.element ) )
@@ -293,6 +299,7 @@ class DataTable:
         out0.day = self.day[self.origin == 0]
         out0.posdyear = self.posdyear[self.origin == 0]
         out0.negdyear = self.negdyear[self.origin == 0]
+        out0.dyearCalc = self.dyearCalc[self.origin == 0]
         out0.lat = self.lat[self.origin == 0]
         out0.lon = self.lon[self.origin == 0]
         out0.element = self.element[self.origin == 0]
@@ -305,6 +312,7 @@ class DataTable:
         out1.day = self.day[self.origin == 1]
         out1.posdyear = self.posdyear[self.origin == 1]
         out1.negdyear = self.negdyear[self.origin == 1]
+        out1.dyearCalc = self.dyearCalc[self.origin == 1]
         out1.lat = self.lat[self.origin == 1]
         out1.lon = self.lon[self.origin == 1]
         out1.element = self.element[self.origin == 1]
@@ -322,6 +330,7 @@ class DataTable:
         out.day = self.day[ind]
         out.posdyear = self.posdyear[ind]
         out.negdyear = self.negdyear[ind]
+        out.dyearCalc = self.dyearCalc[ind]
         out.lat = self.lat[ind]
         out.lon = self.lon[ind]
         out.element = self.element[ind]
@@ -340,6 +349,7 @@ class DataTable:
         out.day = self.day[toto]
         out.posdyear = self.posdyear[toto]
         out.negdyear = self.negdyear[toto]
+        out.dyearCalc = self.dyearCalc[toto]
         out.lat = self.lat[toto]
         out.lon = self.lon[toto]
         out.element = self.element[toto]
