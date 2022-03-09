@@ -20,3 +20,4 @@ workflow.py reads in surface fields to produce a series of diagnostics for rever
 These diagnostics include the calculation of the Earthlikeness according to Christensen et al. (EPSL, 2010.) 
 
 
+The workflow can be run in parallel (it requires the mpi4py library). An example of a submission script on the stella cluster of S-CAPAD (based on slurm) is given in submit_wf.job  
