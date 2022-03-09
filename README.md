@@ -16,4 +16,7 @@ python make_parody_pdaf_input.py
 
 ## Additional features 
 The quality of paleomagnetic modelling can be assessed according to the methodology introduced by Sprain et al. (EPSL, 2019). 
-workflow.py reads in surface fields to produce a series of diagnostics for reversing dynamo simulations. 
+workflow.py reads in surface fields to produce a series of diagnostics for reversing dynamo simulations, which are described in workflow_components.py. 
+These diagnostics include the calculation of the Earthlikeness according to Christensen et al. (EPSL, 2010.) 
+
+
