@@ -40,28 +40,17 @@ for i in range(0,len(year)):
 
 hist_data.year[(~np.isnan(hist_data.month)) & (hist_data.month!=0.)] = year_new 
 
-# Check observatory data given at hours: average over time?
-# Check land and ship survey trajectories
+# Average time-series data depending on the temporal bin length
+# calculate also the std
+dt = 10.
 
-# Gather whole database and sort by date
+observ = hist_data.select_indx(hist_data.source == b'observatory')
+
 
 #all_data = arch_data + hist_data + obs_data
 all_data = arch_data + hist_data 
 
-# Time binning and averaging
-
-dt = 10.
-init = 1000.
-fint = 2000.
-delta = int((fint - init)/ dt)
-
-# Remove data previous to init
-
-all_data = all_data.select_indx(all_data.year > init)
-
 # Remove data without lat lon
-
-# print(len(all_data.year))
 
 all_data = all_data.select_indx(~np.isnan(all_data.lat))
 all_data = all_data.select_indx(~np.isnan(all_data.lon))
@@ -76,32 +65,27 @@ posdyear = all_data.posdyear[np.isnan(all_data.posdyear)]
 posdyear_new = np.zeros_like(posdyear)
 all_data.posdyear[np.isnan(all_data.posdyear)] = posdyear_new
 
-# Create a code for the age uncertainty estimation
 
-#dyearCalc = all_data.dyearCalc[(all_data.dyearCalc=='No measurement') or \
-#	(all_data.dyearCalc=='')]
-#dyearCalc = np.zeros_like(dyearCalc)
-#all_data.dyearCalc[(all_data.dyearCalc=='No measurement') or \
-#	(all_data.dyearCalc=='')] == dyearCalc
+# Time binning and averaging
 
-print(np.char.strip(all_data.dyearCalc))
+init = 1000.
+fint = 2000.
+delta = int((fint - init)/ dt)
+
+# Remove data previous to init
+
+all_data = all_data.select_indx(all_data.year > init)
+
+#print(np.char.strip(all_data.dyearCalc))
 
 all_data.dyearCalc[(all_data.dyearCalc==b'No measurement')] = 0
 all_data.dyearCalc[(all_data.dyearCalc==b'')] = 0
 all_data.dyearCalc[(all_data.dyearCalc==b'Estimate')] = 1
 all_data.dyearCalc[(all_data.dyearCalc==b'Standard Deviation')] = 2
 all_data.dyearCalc[(all_data.dyearCalc==b'2.58 Standard Deviation')] = 2
+# Remember to fix it (though this is only one data)
 
-print(np.char.strip(all_data.dyearCalc))
-
-#dyearCalc = all_data.dyearCalc[(np.char.strip(all_data.dyearCalc)==b'Estimate')]
-#print(dyearCalc)
-#dyearCalc = np.ones_like(dyearCalc)
-#all_data.dyearCalc[(all_data.dyearCalc=='Estimate')] == dyearCalc
-
-#dyearCalc = all_data.dyearCalc[(all_data.dyearCalc=='Standard Deviation')]
-#dyearCalc = np.ones_like(dyearCalc)
-#all_data.dyearCalc[(all_data.dyearCalc=='Standard Deviation')] == dyearCalc
+#print(np.char.strip(all_data.dyearCalc))
 
 # Remove data with archeomagnetic dating
 

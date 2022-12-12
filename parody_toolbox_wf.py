@@ -93,3 +93,21 @@ def compute_glmhlm_from_brlm(br_lm, sh, ltrunc = None, bscale = None):
         hlm = bscale * hlm
 
     return glm, hlm
+
+def brlm2ybpr(brlm, sh, r):
+    ybpr = sh.spec_array()
+    l2 = sh.l * (sh.l + 1)
+    for lm in range(1,len(ybpr)):
+        ybpr[lm] = brlm[lm]*r/l2[lm]
+
+    return ybpr
+
+def ybpr2brlm(ybpr, sh, r):
+    brlm = sh.spec_array()
+    l2 = sh.l * (sh.l + 1)
+    for lm in range(1,len(brlm)):
+        brlm[lm] = ybpr[lm]*l2[lm]/r
+
+    return brlm
+
+
