@@ -168,8 +168,6 @@ df_dt.loc[(df_dt.posdyear==-999.0) & (df_dt.origin==0.0), 'posdyear'] = 0.0
 
 df_dt = df_dt.sort_values(by=['year'])
 
-# Remove data with 0 uncertainty
-
 # Transform angles to radians and field to micro T
 
 delta_i = int((time_ii - time_i)/ dt)
@@ -204,19 +202,21 @@ print(sum(ndata))
 
 # Print data in parody format
 
-f = open('nobs_db_wHF.txt', 'w')
+df_dt['indx'] = range(1, len(df_dt) + 1)
+
+f = open('obs_db_wHF.txt', 'w')
 f.write("pointwise\n")
 f.write("%i\n" % (len(bins)))
 for i in range(0,len(bins)):
     f.write("%i %i %i\n" % (i+1, bins[i], ndata[i]))
 f.close()
 
-df_dt['indx'] = range(1, len(df_dt) + 1)
-
+f = open('obs_db_wHF.txt', 'a')
 cols = ['elem', 'year', 'posdyear', 'dyearC', 'lon', 'lat', 'val', 'dval', 'origin', 'indx']
-df_dt[cols].to_csv('obs_db_wHF.txt', mode = 'w', sep=' ', header=None, index=False)
+df_dt[cols].to_csv(f, sep=' ', header=False, index=False)
+f.close()
 
-cols = ['elem', 'year', 'posdyear', 'dyearC', 'lon', 'lat', 'val', 'dval', 'indx', 'source']
+cols = ['indx','elem', 'year', 'posdyear', 'dyearC', 'lon', 'lat', 'val', 'dval', 'source']
 df_dt[cols].to_csv('full_obs_db_wHF.txt', mode = 'w', sep=' ', header=None, index=False)
 
 
