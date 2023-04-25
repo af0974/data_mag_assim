@@ -269,12 +269,71 @@ def mollweide_surface(F,theta,phi,fname=None,vmax=None,vmin=None,Title=None, pos
         cm.set_label(unit)
     plt.tight_layout()
     if fname is not None:
+       plt.show()
        plt.savefig(fname+'.png')
        #plt.savefig(fname+'.pdf')
     else:
         plt.show()
     plt.close()
     return vmax
+
+def mollweide_data(F,theta,phi,dlon,dlat,dval,fname=None,vmax=None,vmin=None,Title=None, positive=False, cmap=None, unit=None):
+
+    lats = .5 * np.pi - theta
+    lats = np.rad2deg(lats)
+    lons = np.rad2deg(phi)
+    cyclic_data, cyclic_lons = cutil.add_cyclic_point(F, coord=lons)
+    if vmax is None:
+        vmax = np.max(cyclic_data)
+        if vmin is None:
+            vmin = np.min(cyclic_data)
+        vmax = max(vmax,-1.*vmin)
+        print('vmax = ', vmax)
+    if positive is False:
+        levels =  np.linspace(-vmax,vmax, 21, endpoint=True)
+        ticks =  np.linspace(-vmax,vmax, 11, endpoint=True)
+    else:
+        levels =  np.linspace(vmin,vmax, 21, endpoint=True)
+        ticks =  np.linspace(vmin,vmax, 11, endpoint=True)
+    if cmap is not None:
+        cmap = cmap
+    else:
+        cmap = 'seismic'
+    fig = plt.figure()
+    ax = plt.axes( projection = ccrs.Mollweide(central_longitude=0))
+    x, y = np.meshgrid(cyclic_lons, lats)
+    m = ax.contourf(x, y, cyclic_data, levels=levels, transform = ccrs.PlateCarree(), cmap=cmap, extend='both')
+    ax.set_global()
+    ax.coastlines()
+    # Add obs atop projection
+    if dval.size>1:
+        for io in range(len(dval)):
+            xd, yd = hammer2cart(np.pi/2 - dlat[io], dlon[io] - np.pi)
+            ax.scatter(xd, yd, c=dval[io], s=100, cmap=cmap, vmin=vmin, \
+                      vmax=vmax, edgecolors='black')
+    else:
+        xd, yd = hammer2cart(np.pi/2 - dlat, dlon - np.pi)
+        ax.scatter(xd, yd, c=dval, s=100, cmap=cmap, vmin=vmin, \
+                   vmax=vmax, edgecolors='black')
+    # Sabrina
+    if Title is not None:
+        plt.title(Title)
+    plt.tight_layout()
+    cax = fig.add_axes([0.05, .1, .9, 0.05])
+    cm = fig.colorbar(m, cax=cax, ticks=ticks, orientation='horizontal', )
+    if unit is None:
+        cm.set_label(r"$\mu$T")
+    else:
+        cm.set_label(unit)
+    plt.tight_layout()
+    if fname is not None:
+       plt.show()
+       plt.savefig(fname+'.png')
+    else:
+        plt.show()
+    plt.close()
+    return vmax
+
 
 def mollweide_scatter(lon,lat,fname=None,Title=None):
 

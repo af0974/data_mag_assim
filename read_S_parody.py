@@ -2,7 +2,7 @@ import sys
 import struct		# to read crazy fortran records
 import numpy as np
 import rev_process as rp
-fname='St=1.013268414.long'
+fname='St=30.11091768.truth'
 job_out = 'parody'
 
 

@@ -363,3 +363,8 @@ class DataTable:
 
         return out
 
+#    def collapse_mean(self, ind)
+#        out = copy.deepcopy(self) 
+          
+#        return out
+
