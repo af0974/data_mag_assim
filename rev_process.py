@@ -551,6 +551,6 @@ def logfac(dd):
     # Calculate log(dd!)
     # dd is a float, but is truncated to an integer before calculation
     #
-    id = np.int(dd)
+    id = int(dd)
     lgfc = np.sum(np.log(range(1, id+1, 1)))
     return lgfc
