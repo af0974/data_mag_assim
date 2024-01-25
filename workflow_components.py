@@ -64,7 +64,7 @@ def compute_chi2_components(comm, size, rank, config_file):
 	# AD/NAD ratio
     	nad = 0. 
     	nad = nad + 2.*(glm[itime,1,1]**2 + hlm[itime,1,1]**2)
-    	for il in range(2,ltrunc+1):
+        for il in range(2,ltrunc+1):
     		toto = 0.
     		for im in range(0,il+1):
     			toto = toto + (glm[itime,il,im]**2+hlm[itime,il,im]**2)

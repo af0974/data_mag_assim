@@ -41,7 +41,7 @@ def filter_br(br_in, sh_parody,ltrunc):
 def compute_ghlm_from_glmhlm(glm, hlm):
 #
 #   inputs :
-#   glm, hlm: the SH expansion of br at the surface of the dynamo region
+#   glm, hlm: the Gauss coefficients separated in their g and h parts
 #
 
     ltrunc = np.shape(glm)[0]-1 
